@@ -9,6 +9,17 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.6 closed with decision D-010 (buy flow is the main demo)
+Done: Kwame chose option 3. Recorded D-010; PLAN M0.6 ticked (charge PASS, transfers blocked),
+M3.1/M3.2 use a `SimulatedPayout` provider in a separate, labelled verifier build, S1 dropped,
+M5.1 README item added; SPEC §5 note, §9 and Q2 updated; AGENTS.md/CLAUDE.md agent-api line;
+README status lines. No code changed.
+Failed / blocked: none.
+Next: M0.7 [K] fund mainnet dev account (~$3 USDC + a little NEAR) for Test C, or start M1
+(escrow core) while waiting.
+Gotchas: if Kwame's Paystack upgrade is approved later, rerun `scripts/test-b/run.py` (exit 0
+expected) and switch M3 to real transfers.
+
 ## 2026-11-01 — Session 2: M0.6 Test B (BLOCKED: Paystack Starter account cannot send transfers)
 Branch: `test-b/paystack-momo-payouts` (from main after PR #2).
 Done: `scripts/test-b/run.py` (stdlib only; refuses unless Paystack says domain=test; masks phones):

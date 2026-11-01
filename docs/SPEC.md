@@ -97,6 +97,9 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
 6. Optional: buyer withdraws released USDC to another chain via `settlement/` (1Click).
 
 ## 5. Sell flow (USDC → cedis), two-step
+**Demo note (D-010):** the contract logic below is built and tested in full, but the payout check
+in step 3 uses a simulated provider in a separate, clearly labelled verifier build, because a
+Paystack Starter account cannot send transfers.
 1. Seller sends USDC with `ft_transfer_call(msg: open_sell{lp, recipient_commitment})`, where
    `recipient_commitment = sha256(salt ‖ msisdn ‖ provider_code)` and `salt` is 32 random bytes the
    seller keeps (so the number cannot be brute-forced from the hash). Contract locks the USDC and
@@ -179,14 +182,17 @@ mainnet, mock USDC on testnet), `verifier` (wasm URL + sha256 or OutLayer projec
 - Price oracles; the LP sets its own rate.
 - Partial fills, order books, LP reputation, multiple currencies besides GHS/USDC.
 - Disputes, arbiters, admin overrides (by design).
-- `agent-api/` x402 endpoint: stretch goal after the buy flow works end to end.
+- `agent-api/` x402 endpoint: DROPPED (D-010), needs real payouts.
+- Real mobile money payouts: the sell-flow payout check is simulated in the demo (D-010); real
+  payouts need a Paystack Registered Business or a licensed payout partner.
 
 ## 10. Open questions (resolve in M0)
 - Q1 (ANSWERED in M0.4–M0.5, see PROGRESS.md): Exact OutLayer `request_execution` args, deposit, secret access control and callback format
   (Test A). Does the escrow contract or OutLayer own the yield? Mainnet OutLayer account id?
-- Q2 (PARTLY ANSWERED, M0.6): mobile money charge with a custom reference works in test mode.
+- Q2 (ANSWERED, M0.6 + D-010): mobile money charge with a custom reference works in test mode.
   Transfers to mobile money are BLOCKED on a Starter business account ("You cannot initiate third
-  party payouts as a starter business"); they need a Registered Business. Decision pending.
+  party payouts as a starter business"); they need a Registered Business. Decision: the sell-flow
+  payout check is simulated in the demo (D-010).
 - Q3: 1Click quote + withdraw of ~$1 USDC NEAR → Base, fees and time (Test C).
 - Q4: Escrow on testnet (mock USDC) with Intents shown separately on mainnet, or escrow on mainnet
   with tiny amounts so release → Intents runs end to end? Decide after Test A and C (DECISIONS.md).

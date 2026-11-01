@@ -19,7 +19,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [x] M0.5 Test A part 3: WASM calls Paystack `GET /transaction/verify/:ref` with the key from an
       OutLayer secret; contract receives PAID for a real test-mode payment, NOT_PAID for a fake ref,
       UNVERIFIABLE for a revoked key. Check: three runs, three verdicts.
-- [ ] M0.6 Test B: script `scripts/test-b` creates a test-mode GHS mobile money charge with a custom
+- [x] M0.6 Test B (charge + verify PASS; transfers BLOCKED on Starter account → D-010): script `scripts/test-b` creates a test-mode GHS mobile money charge with a custom
       reference, verifies it, and creates + verifies a test-mode mobile money transfer. Check: script
       output (SPEC Q2).
 - [ ] M0.7 [K] Fund mainnet dev account with ~$3 USDC + a little NEAR. (approved exception D-004)
@@ -60,8 +60,10 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 
 ## M3 Sell flow + settlement (Nov 8–10)
 - [ ] M3.1 Sell order: lock, recipient commitment (inv. 13, SPEC Q5), `confirm_received`, `claim_payout`
-      with transfer verify + recipient check, refund. Check: tests.
-- [ ] M3.2 Testnet end-to-end sell with Paystack test transfer. Check: script + tx links.
+      with transfer verify + recipient check, refund. Payout check via `PaymentProvider`; demo uses
+      `SimulatedPayout` in a separate verifier build (D-010). Check: tests.
+- [ ] M3.2 Testnet end-to-end sell with the simulated payout verifier, labelled as simulated (D-010).
+      Check: script + tx links.
 - [ ] M3.3 `settlement/`: withdraw released USDC to Base via 1Click (per D on SPEC Q4). Check: tx links.
 
 ## M4 Web demo (Nov 9–11)
@@ -72,10 +74,11 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.
 
 ## Stretch (only if M2 is done by Nov 9)
-- [ ] S1 `agent-api/` x402 endpoint: agent pays USDC, a Ghana number receives cedis (sell flow).
+- [x] ~~S1 `agent-api/` x402 endpoint~~ DROPPED (D-010): needs real payouts.
 
 ## M5 Submission (Nov 12–14) — feature freeze Nov 12
 - [ ] M5.1 README for judges (PROMPTS.md §9): do X → see Y, mermaid diagram, test-mode disclosure,
+      sell-flow payout is simulated and why (D-010),
       libraries/AI code used, licensing note (Act 1154), limitations.
 - [ ] M5.2 Fresh clone → setup → demo from scratch; fix breakages.
 - [ ] M5.3 Secret scan of git history; add LICENSE check; make repo public [K approves].
