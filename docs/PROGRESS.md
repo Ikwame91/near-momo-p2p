@@ -9,6 +9,121 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.3 DONE (hello-world OutLayer run from the CLI)
+Done:
+- Repo is already PUBLIC (Kwame checked Settings; earlier notes saying "private" are outdated).
+- Hosted the wasm in `wasm/hello.wasm` (D-008). Raw URL pinned to commit 2b53680, downloaded sha256
+  matches 0ca1af08…a36b.
+- `outlayer run --wasm <raw url> --hash 0ca1af08… --input in.json` → tx
+  Gos57Sqjrf4RX3vS8KbRWQe2PyiDgLZDn6RkbupkWL5J, output:
+  ```
+  {"input": {"command": "hello", "order": "opr-1"}, "message": "Hello, ikwame.testnet!", "success": true}
+  ```
+  Echo verified: the input comes back unchanged, through OutLayer's on-chain callback.
+Failed / blocked:
+- `outlayer deploy hello <raw url>` → "Version '0ca1af08…' already exists in project": versions
+  are keyed by hash, and that hash is still bound to the dead FastFS URL. Used `--wasm` instead.
+- With `--wasm`, a positional JSON arg is read as PROJECT, not INPUT (got `"input": {}`). Use
+  `--input <file>`.
+- test.fastfs.io still 502 at end of session.
+Next: M0.4 Test A part 2: tiny testnet contract calls `request_execution` and stores the callback
+result (call shape already recorded in the M0.3 part 1 entry below).
+Gotchas: `NEAR_SENDER_ID` inside the wasm = the account that signed the request (here
+ikwame.testnet); in M0.4 check whether it becomes the calling contract.
+
+## 2026-11-01 — Session 2: M0.3 continued (BLOCKED: FastFS testnet gateway down)
+Done:
+- Funding: near-faucet.io failed for Kwame ("There was an error", 0 NEAR arrived). Workaround:
+  `near account create-account sponsor-by-faucet-service openramp-funder-64532.testnet
+  use-manually-provided-public-key <ikwame.testnet public key>` (got 10 NEAR, same key, no new
+  secret), then sent 9.9 NEAR → ikwame.testnet. Balance now 9.9 NEAR.
+- `outlayer upload out/hello.wasm` OK →
+  https://test.fastfs.io/ikwame.testnet/outlayer.testnet/0ca1af08790c4d29256766cb7193840c908339e3353221e397418814cdfaa36b.wasm
+- `outlayer deploy hello <url> --hash 0ca1af08…a36b` → "Project deployed" (without `--hash` the CLI
+  tries to download the file and fails on the 502).
+- `outlayer run ikwame.testnet/hello '{"command":"hello"}'` → tx
+  BVDybc2yosHq9ZNUHRTJiCfbEyjvbknBjUzsXDiMWdna. The on-chain round trip WORKS:
+  `execution_requested` (request_id 6435) → yield → `execution_completed` callback on
+  outlayer.testnet, charged 0.001 NEAR then refunded. Final tx value: `null`.
+Failed / blocked:
+- Worker log: `Execution failed: "wasm_url could not be fetched"`. `curl https://test.fastfs.io/`
+  (gateway root, not just our file) → `502 error code: 502` (Cloudflare). FastFS testnet is down.
+  Attempt 1: deploy without --hash (502). Attempt 2: deploy with --hash + run (worker can't fetch).
+- Docs (https://app.outlayer.ai/docs/getting-started): "Any https URL works for `outlayer deploy`";
+  the worker checks the sha256. So a public HTTPS host for the wasm is a valid fallback.
+Next (Kwame to choose): (a) retry later when test.fastfs.io is back, or (b) host hello.wasm at a
+public HTTPS URL (our repo is private, so raw.githubusercontent won't work without making it
+public; e.g. a release asset in a small public repo).
+Gotchas: an execution failure is still delivered through the callback (with the fee refunded),
+so the escrow must treat an OutLayer error as UNVERIFIABLE (SPEC §4.5 already says so). Set
+RUST_BACKTRACE=0 to get readable outlayer CLI errors.
+
+## 2026-11-01 — Session 2: M0.3 Test A part 1 (BLOCKED: testnet account has 0 NEAR)
+Done:
+- `outlayer login testnet` with NEAR_ACCOUNT_ID / NEAR_PRIVATE_KEY piped from env (key saved to
+  ~/.outlayer, outside the repo). `outlayer whoami` → ikwame.testnet, contract outlayer.testnet.
+- `outlayer create hello` → `scripts/test-a/hello` (template already echoes the JSON input).
+  `./build.sh` → `out/hello.wasm`, 173717 bytes,
+  sha256 0ca1af08790c4d29256766cb7193840c908339e3353221e397418814cdfaa36b.
+- From outlayer-cli 0.2.1 source (`src/commands/run.rs`), the on-chain call (useful for M0.4):
+  `outlayer.testnet.request_execution({source: {Project:{project_id,version_key}} |
+  {WasmUrl:{url,hash,build_target}}, resource_limits:{max_instructions,max_memory_mb,
+  max_execution_seconds}, input_data:<JSON string>, secrets_ref:{profile,account_id}|null,
+  response_format:"Json", payer_account_id:null, params:null})`, 300 TGas, deposit =
+  `estimate_execution_cost(resource_limits, input_len)` view call (yoctoNEAR).
+  Without PAYMENT_KEY, `outlayer run` uses this on-chain path.
+Failed / blocked:
+- RPC view_account ikwame.testnet: `amount 0`, 1 full-access key (matches env key). Upload
+  (FastFS tx), deploy and run all need testnet NEAR. [K] fund the account, then rerun:
+  `outlayer upload out/hello.wasm` → `outlayer deploy hello <url>` →
+  `outlayer run ikwame.testnet/hello '{"command":"hello"}'`.
+Next: after funding, finish M0.3 (paste run output), then M0.4.
+Gotchas: `outlayer` commands all need `outlayer login` first (even `create`). The OutLayer
+getting-started page says "Live on NEAR Mainnet" but the CLI supports testnet (outlayer.testnet).
+
+## 2026-11-01 — Session 2: M0.2 toolchain
+Done: toolchain installed from crates.io (cargo install --locked), all checks pass:
+```
+rustc 1.97.0 (2d8144b78 2026-07-07)
+targets: wasm32-unknown-unknown, wasm32-wasip2, x86_64-unknown-linux-gnu
+cargo-near-near 0.22.0
+near-cli-rs 0.30.1
+outlayer 0.2.1   (outlayer --help OK)
+```
+Recipe that works in the cloud container:
+```
+rustup target add wasm32-unknown-unknown wasm32-wasip2
+cargo install --locked outlayer-cli
+cargo install --locked cargo-near --no-default-features
+cargo install --locked near-cli-rs --no-default-features --features inspect_contract,verify_contract
+```
+Failed / blocked:
+- OutLayer's official `install.sh` (https://outlayer.ai/docs/getting-started) was blocked by the
+  auto-mode safety check; the crates.io `outlayer-cli` points to the same repo (out-layer/outlayer-cli).
+- api.github.com returned 403 through the proxy, so GitHub release binaries were not used.
+- First cargo-near build failed: default `ledger` feature needs system `libudev` (not installed).
+  Ledger is not needed, so built without default features.
+Next: M0.3 Test A part 1 (hello-world OutLayer WASM). Needs `outlayer login` with the testnet key.
+Gotchas: containers start clean; all of the above is lost. Full build ~10 min. See PLAN M0.2b.
+
+## 2026-11-01 — Session 2: secrets check (handoff task 1)
+Done:
+- Env vars (checked set/missing only, values never printed):
+  `PAYSTACK_SECRET_KEY missing`, `NEAR_ACCOUNT_ID set` (a `.testnet` account),
+  `NEAR_PRIVATE_KEY set` (`ed25519:` format), `ONECLICK_API_KEY missing`.
+- Paystack key is injected by the agent proxy, not an env var:
+  `GET /transaction/verify/opr-probe-does-not-exist` → HTTP 400 `transaction_not_found`
+  (would be 401 without auth); `GET /transaction?perPage=1` → `status True`, 0 transactions.
+- Documented both mechanisms in `.env.example`.
+Failed / blocked: none.
+Open: not yet proven that the injected key is a TEST key (no field says so; account has no
+transactions). Confirm in M0.6 by checking `domain == "test"` on the first charge.
+M0.1 still open: mainnet dev account + 1Click key (for M0.7–M0.8) [K].
+Next: M0.2 toolchain from scratch (cargo-near, near-cli-rs, outlayer CLI), then M0.3.
+Gotchas: Paystack code must not fail when PAYSTACK_SECRET_KEY is empty in cloud sessions (proxy
+adds auth). The OutLayer TEE will NOT have this proxy, so the verifier still needs the key as an
+OutLayer secret (M0.5).
+
 ## 2026-11-01 — Handoff: end of session 1 (switching to a new session so secrets load)
 Current state: Docs only (AGENTS, SPEC, THREAT_MODEL, PLAN, DECISIONS, PROMPTS). Kwame APPROVED
 SPEC + PLAN. No code yet.
