@@ -9,6 +9,35 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.5 Test A part 3 (IN PROGRESS: waiting for Kwame to store the real key)
+Done:
+- Paystack key is TEST mode: `/transaction/initialize` (ref opr-probe-modecheck-2) then verify →
+  `domain: test`, status `abandoned`. Custom `opr-…` references accepted.
+- PAID fixture: `POST /charge` GHS 1000 pesewas, `mobile_money {phone 0551234987, provider mtn}`,
+  reference `opr-test-a-paid-1` → `success` / `Approved`, channel mobile_money, paid_at
+  2026-11-01T20:48:20Z (answers the charge half of SPEC Q2).
+- `scripts/test-a/paystack-verify`: pure `decide()` + `reference_is_valid()` in lib.rs, wasi-http
+  call in main.rs. `cargo test`: 15 passed. wasm sha256
+  021f8568f2cc9001e7060fedb02786fb02212b5e8ad8ffedd3f35c98b3d49c61, hosted in `wasm/` (commit 14ff01b).
+- test-a contract: `request()` now takes optional `secrets_ref`; 6 tests pass; redeployed
+  (tx 5GETLALTzZK7j1o3MLc4AjFSKMPGBVHY3sVybvmCV25G).
+- `scripts/test-a/verify-run.sh <profile> <reference>` runs one check through the contract.
+- UNVERIFIABLE (revoked/invalid key): secret profile `bad-key` = `sk_test_000…` (not a real key),
+  bound to the wasm hash, access `allow-all --via test-a.ikwame.testnet` →
+  `verify-run.sh bad-key opr-test-a-paid-1` → stored
+  `{"verdict":"UNVERIFIABLE","reason":"auth_error"}` (tx 6ZzC8kmJtBXCJ3s4EbRGk4DoJJjaUqXuauh7jSc1wuMd).
+- Access control works: same secret called directly by ikwame.testnet (not via the contract) →
+  "Access denied by access condition — signer ikwame.testnet, called from ikwame.testnet"
+  (tx BLA7e4tvgUPgWuHxCgVccHLtdRmuinHfx9SuGMh4P8z4).
+Failed: first try used `--access whitelist:test-a… --direct` → denied, because a Whitelist is
+checked against the SIGNER (ikwame.testnet). The right rule is `--access allow-all --via <contract>`
+= `Predecessor{Whitelist[contract]}`: any signer, but only through that contract. For the escrow
+this is what each LP stores (plus the build lock).
+Next: [K] store the real test key as profile `paystack` with the same binding/access, then run
+PAID (`opr-test-a-paid-1`) and NOT_PAID (`opr-test-a-missing-1`, and `opr-probe-modecheck-2` = abandoned).
+Gotchas: `outlayer secrets list` shows nothing for wasm-hash rows. Every verifier rebuild changes
+the hash, so the secret must be re-bound (`outlayer secrets access --build`) or re-stored.
+
 ## 2026-11-01 — Session 2: M0.4 DONE (contract → OutLayer → callback)
 Done:
 - `scripts/test-a/contract` (near-sdk 5.30): `request(wasm_url, wasm_hash, input)` calls

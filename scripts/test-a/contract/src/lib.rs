@@ -47,6 +47,13 @@ pub fn classify(result: Result<Vec<u8>, PromiseError>) -> Outcome {
     }
 }
 
+#[near(serializers = [json])]
+#[derive(Clone, Debug)]
+pub struct SecretsRef {
+    pub profile: String,
+    pub account_id: AccountId,
+}
+
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug)]
 pub struct Record {
@@ -74,15 +81,23 @@ impl Contract {
     /// Ask OutLayer to run `wasm_url` (checked against `wasm_hash`) with `input`.
     /// Attach the OutLayer fee (see `estimate_execution_cost` on outlayer.testnet); any
     /// unused part is refunded by OutLayer to the signer.
+    /// `secrets_ref`: optional `{"profile": .., "account_id": ..}` naming an OutLayer secret row
+    /// (M0.5); OutLayer checks the row's access condition against this contract as caller.
     #[payable]
-    pub fn request(&mut self, wasm_url: String, wasm_hash: String, input: String) -> Promise {
+    pub fn request(
+        &mut self,
+        wasm_url: String,
+        wasm_hash: String,
+        input: String,
+        secrets_ref: Option<SecretsRef>,
+    ) -> Promise {
         let id = self.next_id;
         self.next_id += 1;
         let args = json!({
             "source": {"WasmUrl": {"url": wasm_url, "hash": wasm_hash, "build_target": "wasm32-wasip2"}},
             "resource_limits": {"max_instructions": 1_000_000_000u64, "max_memory_mb": 128, "max_execution_seconds": 20},
             "input_data": input,
-            "secrets_ref": null,
+            "secrets_ref": secrets_ref,
             "response_format": "Json",
             "payer_account_id": null,
             "params": null
