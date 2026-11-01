@@ -13,7 +13,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
       Check: fresh container has all four versions.
 - [x] M0.3 Test A part 1: hello-world OutLayer WASM (echo input) uploaded and run from CLI.
       Check: CLI shows output.
-- [ ] M0.4 Test A part 2: tiny testnet contract `scripts/test-a/contract` calls OutLayer
+- [x] M0.4 Test A part 2: tiny testnet contract `scripts/test-a/contract` calls OutLayer
       `request_execution` and stores the callback result. Check: `near view` shows the stored result;
       record call args, deposit, callback shape, who can call the callback (SPEC Q1, T13).
 - [ ] M0.5 Test A part 3: WASM calls Paystack `GET /transaction/verify/:ref` with the key from an

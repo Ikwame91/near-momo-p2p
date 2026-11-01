@@ -17,11 +17,13 @@ Each row maps to a test (filled in as tests are written).
 | T10 | LP | Change the rate after the buyer opened the order | Rate and `ghs_amount` are fixed in the order at open time | — |
 | T11 | LP | Never pay out in a sell order but keep the seller's USDC | USDC only goes to the LP on PAID or seller confirmation; otherwise the seller refunds after the deadline | — |
 | T12 | Seller | Receive cedis, then refuse to confirm | The LP proves the payout with `claim_payout`; the verdict releases USDC without the seller | — |
-| T13 | Outsider | Call the callback directly with a fake PAID | Callback is private (only the contract's own promise / OutLayer resume can deliver it) and must match the order's current request id **[confirm in Test A]** | — |
+| T13 | Outsider | Call the callback directly with a fake PAID | Callback is `#[private]` (only the contract's own `.then` can deliver it) and must match the order's current request id. Confirmed in Test A (M0.4): direct call → "Method on_result is private" | test-a `on_result` (testnet); escrow test TBD |
 | T14 | Outsider | Front-run: see a buyer's payment reference and claim it for their own order | Reference is tied to one order id; claiming another order with it fails the reference check | — |
 | T15 | Anyone | Two claims in flight; callbacks arrive out of order | One verification in flight per order; stale callbacks ignored | — |
-| T16 | OutLayer | Never responds / errors | Yield timeout or error → UNVERIFIED (never NOT_PAID, never release); retry allowed | — |
+| T16 | OutLayer | Never responds / errors | Yield timeout or error → UNVERIFIED (never NOT_PAID, never release); retry allowed. Test A: failed run returns JSON `null`; OutLayer's timeout path returns no value (empty); oversized result → treat as no value | test-a `classify` unit tests |
 | T17 | OutLayer/TEE | Compromised worker returns a false PAID | Trust assumption of the design (TEE attestation by OutLayer). Documented in README as a limitation | — |
 | T18 | Anyone | Storage exhaustion by creating many orders | Caller pays storage deposit for each order; refunded when the order closes | — |
 | T19 | Anyone | Leak phone numbers or keys | Phone numbers only on Paystack pages / LP service; keys only in OutLayer secrets; no logging of either; review prompt checks logs | — |
+| T21 | Anyone | Trigger verification with their own wasm that always prints PAID | The escrow fixes the verifier source (wasm URL + sha256, or OutLayer project + version) at deploy; callers can never choose it. Found in Test A: the probe's `request()` takes the URL from the caller, the escrow must not | — |
+| T22 | OutLayer operator | The OutLayer operator account submits a false result (`resolve_execution` is operator-only) | Same trust assumption as T17 (TEE attestation); documented in README | — |
 | T20 | Owner | Change parameters to trap open orders | Orders copy the parameters they were opened with; owner has no fund-moving methods | — |

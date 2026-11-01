@@ -9,6 +9,38 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.4 DONE (contract → OutLayer → callback)
+Done:
+- `scripts/test-a/contract` (near-sdk 5.30): `request(wasm_url, wasm_hash, input)` calls
+  `outlayer.testnet.request_execution` (200 TGas, deposit = attached) `.then(on_result)` (30 TGas,
+  `#[private]`); `on_result` sorts the result with `classify()` and stores it; `get_records` view.
+  `cargo test`: 6 passed (output / null / empty / not-JSON / too long / promise failed).
+  `cargo near build non-reproducible-wasm` OK. Deployed to test-a.ikwame.testnet (3 NEAR,
+  create tx Dd4nhjpQ1QS3K6amK6yNqq47z7pUmZ4PS1BdCkUmKv6U, deploy tx 3y9YaotkF3gbYS4batLRueKQghFhT7AZYcmXzaPhdkdH).
+- Run 1, real hello.wasm → stored `{"kind":"Output","value":{"input":{"command":"hello","order":"opr-7"},
+  "message":"Hello, ikwame.testnet!","success":true}}` (block 275800166). Attached 0.01 NEAR;
+  estimate_execution_cost said 0.0030001 NEAR.
+- Run 2, wrong hash (00…00) → OutLayer `"wasm_url content does not match its hash"`, charged
+  0.001 NEAR, refunded 0.009 → stored `{"kind":"RunFailed"}` (tx CD1r8t2AmjYsX7Keyt1pRfRvWrJfcSidsxgWvEHoMSMW).
+- Run 3, ikwame.testnet calls `on_result` directly → `Smart contract panicked: Method on_result is
+  private`; no record added (T13 confirmed).
+- `near view test-a.ikwame.testnet get_records` → exactly the 2 records above.
+- SPEC Q1 answers: call shape and deposit as above; our contract owns the `.then` callback,
+  OutLayer owns the yield (it resumes its own `on_execution_response`, whose return value is what
+  our callback gets). Result = program JSON on success, `null` on failed run, empty on promise
+  failure / timeout. Only the OutLayer operator can resolve a request (`assert_operator`).
+  `NEAR_SENDER_ID` in the wasm = the transaction signer (ikwame.testnet), not the calling contract.
+  Source: github.com/out-layer/outlayer contract/src/execution.rs, app.outlayer.ai/docs/near-integration.
+Findings for the escrow (added to THREAT_MODEL): T21: the escrow must fix the verifier wasm
+URL+hash itself, never take it from the caller. T22: operator trust, same as T17.
+Failed / blocked: none. Timeout path not triggered live (can't force OutLayer to stay silent);
+covered by reading the source + unit test.
+Next: M0.5 Test A part 3: wasm calls Paystack with the key from an OutLayer secret; PAID /
+NOT_PAID / UNVERIFIABLE. Needs Kwame to store the Paystack test key as an OutLayer secret.
+Gotchas: `PromiseError` is non_exhaustive (needs a catch-all arm; fail closed). Use
+`promise_result_checked` (old `promise_result` is deprecated). near CLI echoes the private key
+in its "re-run" hint: always filter output.
+
 ## 2026-11-01 — Session 2: M0.3 DONE (hello-world OutLayer run from the CLI)
 Done:
 - Repo is already PUBLIC (Kwame checked Settings; earlier notes saying "private" are outdated).
