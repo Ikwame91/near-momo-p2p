@@ -102,10 +102,15 @@ def main():
     s, d = call("POST", "/transfer", {"source": "balance", "amount": AMOUNT_PAYOUT, "recipient": rcp,
                                       "reference": ref3, "reason": "OpenRamp Test B", "currency": "GHS"})
     if s != 200:
-        print(f"BLOCKED transfer: HTTP {s}, code={d.get('code')}, message={d.get('message')!r}")
+        # Only the Starter-account restriction counts as "blocked" (exit 2). Any other error
+        # (insufficient balance, invalid recipient, server error) is a real failure (exit 1).
+        # https://paystack.com/docs/api/errors/transfer/
+        blocked = d.get("code") == "transfer_unavailable"
+        label = "BLOCKED" if blocked else "FAIL"
+        print(f"{label} transfer: HTTP {s}, code={d.get('code')}, message={d.get('message')!r}")
         s, d = call("GET", f"/transfer/verify/{ref3}")
         print(f"INFO transfer verify (no transfer): HTTP {s}, code={d.get('code')}, message={d.get('message')!r}")
-        return 1 if not ok else 2
+        return 2 if (ok and blocked) else 1
     t = d.get("data") or {}
     step("transfer", True, f"status={t.get('status')}, ref={t.get('reference')}, code={t.get('transfer_code')}")
 
