@@ -184,8 +184,9 @@ mainnet, mock USDC on testnet), `verifier` (wasm URL + sha256 or OutLayer projec
 ## 10. Open questions (resolve in M0)
 - Q1 (ANSWERED in M0.4–M0.5, see PROGRESS.md): Exact OutLayer `request_execution` args, deposit, secret access control and callback format
   (Test A). Does the escrow contract or OutLayer own the yield? Mainnet OutLayer account id?
-- Q2: Paystack test-mode mobile money charge with a custom reference; transfer to mobile money in
-  test mode (Test B).
+- Q2 (PARTLY ANSWERED, M0.6): mobile money charge with a custom reference works in test mode.
+  Transfers to mobile money are BLOCKED on a Starter business account ("You cannot initiate third
+  party payouts as a starter business"); they need a Registered Business. Decision pending.
 - Q3: 1Click quote + withdraw of ~$1 USDC NEAR → Base, fees and time (Test C).
 - Q4: Escrow on testnet (mock USDC) with Intents shown separately on mainnet, or escrow on mainnet
   with tiny amounts so release → Intents runs end to end? Decide after Test A and C (DECISIONS.md).

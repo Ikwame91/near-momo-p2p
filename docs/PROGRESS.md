@@ -9,6 +9,30 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.6 Test B (BLOCKED: Paystack Starter account cannot send transfers)
+Branch: `test-b/paystack-momo-payouts` (from main after PR #2).
+Done: `scripts/test-b/run.py` (stdlib only; refuses unless Paystack says domain=test; masks phones):
+```
+PASS preflight: domain=test (ref opr-test-b-mode-1793571896)
+PASS charge: HTTP 200, status=success, gateway=Approved, phone ***987
+PASS charge verify: status=success, ref=opr-test-b-charge-1793571896, amount=1000 GHS, channel=mobile_money, paid_at=2026-11-01T22:24:57.000Z
+PASS recipient: HTTP 201, RCP_ll1vjfsjqk79ot2, number ***987, bank MTN
+BLOCKED transfer: HTTP 400, code=transfer_unavailable, message='You cannot initiate third party payouts as a starter business'
+INFO transfer verify (no transfer): HTTP 404, code=not_found, message='Transfer not found'
+exit 2
+```
+- GHS mobile money bank codes (GET /bank?currency=GHS&type=mobile_money): MTN, VOD (Vodafone/Telecel), ATL (AirtelTigo).
+- Recipient object includes `details.account_number`, `bank_code` and `integration`: usable for the
+  T23 recipient check, IF transfer verify returns the recipient (not yet seen: no transfer exists).
+- Transfer verify "not found" is HTTP 404 `code: not_found` (payment verify uses 400
+  `transaction_not_found`): the verifier must map each endpoint separately.
+Failed / blocked: POST /transfer → 400 `transfer_unavailable`. Paystack help: Starter businesses
+have no Transfers; upgrade to Registered Business on the Compliance page (needs business
+registration docs and a matching business bank account).
+https://support2.paystack.com/hc/en-us/articles/360009972719-What-is-a-Paystack-Starter-Business
+Impact: buy flow (on-ramp) unaffected. Sell flow (M3) and agent-api stretch (S1) need payouts.
+Next: Kwame decides (upgrade / other payout provider / sell flow with mocked payouts).
+
 ## 2026-11-01 — Session 2: M0.10 security design update (docs only)
 Done: Reviewed Kwame's security audit (written before M0.4/M0.5). Already handled: #5 secret
 access (M0.5), #9 callback (M0.4), #10 (the real verifier fails closed). Adopted #1, #2, #4, #6, #7,
