@@ -9,6 +9,28 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.3 DONE (hello-world OutLayer run from the CLI)
+Done:
+- Repo is already PUBLIC (Kwame checked Settings; earlier notes saying "private" are outdated).
+- Hosted the wasm in `wasm/hello.wasm` (D-008). Raw URL pinned to commit 2b53680, downloaded sha256
+  matches 0ca1af08…a36b.
+- `outlayer run --wasm <raw url> --hash 0ca1af08… --input in.json` → tx
+  Gos57Sqjrf4RX3vS8KbRWQe2PyiDgLZDn6RkbupkWL5J, output:
+  ```
+  {"input": {"command": "hello", "order": "opr-1"}, "message": "Hello, ikwame.testnet!", "success": true}
+  ```
+  Echo verified: the input comes back unchanged, through OutLayer's on-chain callback.
+Failed / blocked:
+- `outlayer deploy hello <raw url>` → "Version '0ca1af08…' already exists in project": versions
+  are keyed by hash, and that hash is still bound to the dead FastFS URL. Used `--wasm` instead.
+- With `--wasm`, a positional JSON arg is read as PROJECT, not INPUT (got `"input": {}`). Use
+  `--input <file>`.
+- test.fastfs.io still 502 at end of session.
+Next: M0.4 Test A part 2: tiny testnet contract calls `request_execution` and stores the callback
+result (call shape already recorded in the M0.3 part 1 entry below).
+Gotchas: `NEAR_SENDER_ID` inside the wasm = the account that signed the request (here
+ikwame.testnet); in M0.4 check whether it becomes the calling contract.
+
 ## 2026-11-01 — Session 2: M0.3 continued (BLOCKED: FastFS testnet gateway down)
 Done:
 - Funding: near-faucet.io failed for Kwame ("There was an error", 0 NEAR arrived). Workaround:

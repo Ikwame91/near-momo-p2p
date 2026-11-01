@@ -50,3 +50,14 @@ DECISIONS, THREAT_MODEL; prompts in docs/PROMPTS.md. Push freely; ask before goi
 
 ## D-007 Escrow network for the demo (open)
 Status: open — decide in M0.9 (SPEC Q4)
+
+## D-008 Host OutLayer wasm files in this repo's `wasm/` folder (Nov 1, 2026)
+Status: accepted
+Context: FastFS testnet (test.fastfs.io) returned 502 for everyone, so OutLayer workers could not
+fetch our program. OutLayer docs: "Any https URL works"; the worker checks the file's sha256.
+The repo is already public.
+Decision: commit built `.wasm` files to `wasm/` and give OutLayer the raw GitHub URL pinned to a
+commit SHA (`https://raw.githubusercontent.com/Ikwame91/near-momo-p2p/<sha>/wasm/<file>`), with
+`--hash`. Never put secrets there; secrets reach programs only as OutLayer secrets.
+Alternatives: FastFS (preferred when it is up; recheck each session), a separate public repo
+(not needed since this repo is public).

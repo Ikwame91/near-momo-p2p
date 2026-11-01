@@ -11,7 +11,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M0.2b Toolchain setup script (`scripts/setup-toolchain.sh`, recipe in PROGRESS session 2) and
       add it to the cloud environment setup script [K], so new containers don't rebuild for ~10 min.
       Check: fresh container has all four versions.
-- [ ] M0.3 Test A part 1: hello-world OutLayer WASM (echo input) uploaded and run from CLI.
+- [x] M0.3 Test A part 1: hello-world OutLayer WASM (echo input) uploaded and run from CLI.
       Check: CLI shows output.
 - [ ] M0.4 Test A part 2: tiny testnet contract `scripts/test-a/contract` calls OutLayer
       `request_execution` and stores the callback result. Check: `near view` shows the stored result;
