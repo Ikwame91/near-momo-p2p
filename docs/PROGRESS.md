@@ -9,6 +9,29 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.3 Test A part 1 (BLOCKED: testnet account has 0 NEAR)
+Done:
+- `outlayer login testnet` with NEAR_ACCOUNT_ID / NEAR_PRIVATE_KEY piped from env (key saved to
+  ~/.outlayer, outside the repo). `outlayer whoami` → ikwame.testnet, contract outlayer.testnet.
+- `outlayer create hello` → `scripts/test-a/hello` (template already echoes the JSON input).
+  `./build.sh` → `out/hello.wasm`, 173717 bytes,
+  sha256 0ca1af08790c4d29256766cb7193840c908339e3353221e397418814cdfaa36b.
+- From outlayer-cli 0.2.1 source (`src/commands/run.rs`), the on-chain call (useful for M0.4):
+  `outlayer.testnet.request_execution({source: {Project:{project_id,version_key}} |
+  {WasmUrl:{url,hash,build_target}}, resource_limits:{max_instructions,max_memory_mb,
+  max_execution_seconds}, input_data:<JSON string>, secrets_ref:{profile,account_id}|null,
+  response_format:"Json", payer_account_id:null, params:null})`, 300 TGas, deposit =
+  `estimate_execution_cost(resource_limits, input_len)` view call (yoctoNEAR).
+  Without PAYMENT_KEY, `outlayer run` uses this on-chain path.
+Failed / blocked:
+- RPC view_account ikwame.testnet: `amount 0`, 1 full-access key (matches env key). Upload
+  (FastFS tx), deploy and run all need testnet NEAR. [K] fund the account, then rerun:
+  `outlayer upload out/hello.wasm` → `outlayer deploy hello <url>` →
+  `outlayer run ikwame.testnet/hello '{"command":"hello"}'`.
+Next: after funding, finish M0.3 (paste run output), then M0.4.
+Gotchas: `outlayer` commands all need `outlayer login` first (even `create`). The OutLayer
+getting-started page says "Live on NEAR Mainnet" but the CLI supports testnet (outlayer.testnet).
+
 ## 2026-11-01 — Session 2: M0.2 toolchain
 Done: toolchain installed from crates.io (cargo install --locked), all checks pass:
 ```
