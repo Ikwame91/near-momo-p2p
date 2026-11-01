@@ -9,6 +9,16 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.10 security design update (docs only)
+Done: Reviewed Kwame's security audit (written before M0.4/M0.5). Already handled: #5 secret
+access (M0.5), #9 callback (M0.4), #10 (the real verifier fails closed). Adopted #1, #2, #4, #6, #7,
+#8 as SPEC v0.2 invariants 9–14 + THREAT_MODEL T23–T29; #3 adopted with a change (T30: every
+failure still counts, because an LP can cause failures too). #11 → PLAN M2.6. #12: moved
+`claude/agents/security-auditor.md` → `.claude/agents/` (merged main first: PR #1 + agent file).
+Checked: Paystack verify response has no integration id (field list only), so key fingerprint it is.
+Failed / blocked: none. No code changed.
+Next: M0.6 Test B (transfers + transfer verify; also check recipient fields for T23).
+
 ## 2026-11-01 — Session 2: M0.5 DONE (Test A complete: real Paystack verdicts on OutLayer)
 Done: Kwame stored the real test key as OutLayer secret profile `paystack` (wasm-hash 021f85…c61,
 access allow-all via test-a.ikwame.testnet). All runs through `scripts/test-a/verify-run.sh`,
