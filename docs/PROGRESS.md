@@ -9,6 +9,33 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.3 continued (BLOCKED: FastFS testnet gateway down)
+Done:
+- Funding: near-faucet.io failed for Kwame ("There was an error", 0 NEAR arrived). Workaround:
+  `near account create-account sponsor-by-faucet-service openramp-funder-64532.testnet
+  use-manually-provided-public-key <ikwame.testnet public key>` (got 10 NEAR, same key, no new
+  secret), then sent 9.9 NEAR → ikwame.testnet. Balance now 9.9 NEAR.
+- `outlayer upload out/hello.wasm` OK →
+  https://test.fastfs.io/ikwame.testnet/outlayer.testnet/0ca1af08790c4d29256766cb7193840c908339e3353221e397418814cdfaa36b.wasm
+- `outlayer deploy hello <url> --hash 0ca1af08…a36b` → "Project deployed" (without `--hash` the CLI
+  tries to download the file and fails on the 502).
+- `outlayer run ikwame.testnet/hello '{"command":"hello"}'` → tx
+  BVDybc2yosHq9ZNUHRTJiCfbEyjvbknBjUzsXDiMWdna. The on-chain round trip WORKS:
+  `execution_requested` (request_id 6435) → yield → `execution_completed` callback on
+  outlayer.testnet, charged 0.001 NEAR then refunded. Final tx value: `null`.
+Failed / blocked:
+- Worker log: `Execution failed: "wasm_url could not be fetched"`. `curl https://test.fastfs.io/`
+  (gateway root, not just our file) → `502 error code: 502` (Cloudflare). FastFS testnet is down.
+  Attempt 1: deploy without --hash (502). Attempt 2: deploy with --hash + run (worker can't fetch).
+- Docs (https://app.outlayer.ai/docs/getting-started): "Any https URL works for `outlayer deploy`";
+  the worker checks the sha256. So a public HTTPS host for the wasm is a valid fallback.
+Next (Kwame to choose): (a) retry later when test.fastfs.io is back, or (b) host hello.wasm at a
+public HTTPS URL (our repo is private, so raw.githubusercontent won't work without making it
+public; e.g. a release asset in a small public repo).
+Gotchas: an execution failure is still delivered through the callback (with the fee refunded),
+so the escrow must treat an OutLayer error as UNVERIFIABLE (SPEC §4.5 already says so). Set
+RUST_BACKTRACE=0 to get readable outlayer CLI errors.
+
 ## 2026-11-01 — Session 2: M0.3 Test A part 1 (BLOCKED: testnet account has 0 NEAR)
 Done:
 - `outlayer login testnet` with NEAR_ACCOUNT_ID / NEAR_PRIVATE_KEY piped from env (key saved to
