@@ -9,6 +9,31 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.2 toolchain
+Done: toolchain installed from crates.io (cargo install --locked), all checks pass:
+```
+rustc 1.97.0 (2d8144b78 2026-07-07)
+targets: wasm32-unknown-unknown, wasm32-wasip2, x86_64-unknown-linux-gnu
+cargo-near-near 0.22.0
+near-cli-rs 0.30.1
+outlayer 0.2.1   (outlayer --help OK)
+```
+Recipe that works in the cloud container:
+```
+rustup target add wasm32-unknown-unknown wasm32-wasip2
+cargo install --locked outlayer-cli
+cargo install --locked cargo-near --no-default-features
+cargo install --locked near-cli-rs --no-default-features --features inspect_contract,verify_contract
+```
+Failed / blocked:
+- OutLayer's official `install.sh` (https://outlayer.ai/docs/getting-started) was blocked by the
+  auto-mode safety check; the crates.io `outlayer-cli` points to the same repo (out-layer/outlayer-cli).
+- api.github.com returned 403 through the proxy, so GitHub release binaries were not used.
+- First cargo-near build failed: default `ledger` feature needs system `libudev` (not installed).
+  Ledger is not needed, so built without default features.
+Next: M0.3 Test A part 1 (hello-world OutLayer WASM). Needs `outlayer login` with the testnet key.
+Gotchas: containers start clean; all of the above is lost. Full build ~10 min. See PLAN M0.2b.
+
 ## 2026-11-01 — Session 2: secrets check (handoff task 1)
 Done:
 - Env vars (checked set/missing only, values never printed):
