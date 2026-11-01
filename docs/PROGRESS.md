@@ -9,6 +9,24 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: secrets check (handoff task 1)
+Done:
+- Env vars (checked set/missing only, values never printed):
+  `PAYSTACK_SECRET_KEY missing`, `NEAR_ACCOUNT_ID set` (a `.testnet` account),
+  `NEAR_PRIVATE_KEY set` (`ed25519:` format), `ONECLICK_API_KEY missing`.
+- Paystack key is injected by the agent proxy, not an env var:
+  `GET /transaction/verify/opr-probe-does-not-exist` → HTTP 400 `transaction_not_found`
+  (would be 401 without auth); `GET /transaction?perPage=1` → `status True`, 0 transactions.
+- Documented both mechanisms in `.env.example`.
+Failed / blocked: none.
+Open: not yet proven that the injected key is a TEST key (no field says so; account has no
+transactions). Confirm in M0.6 by checking `domain == "test"` on the first charge.
+M0.1 still open: mainnet dev account + 1Click key (for M0.7–M0.8) [K].
+Next: M0.2 toolchain from scratch (cargo-near, near-cli-rs, outlayer CLI), then M0.3.
+Gotchas: Paystack code must not fail when PAYSTACK_SECRET_KEY is empty in cloud sessions (proxy
+adds auth). The OutLayer TEE will NOT have this proxy, so the verifier still needs the key as an
+OutLayer secret (M0.5).
+
 ## 2026-11-01 — Handoff: end of session 1 (switching to a new session so secrets load)
 Current state: Docs only (AGENTS, SPEC, THREAT_MODEL, PLAN, DECISIONS, PROMPTS). Kwame APPROVED
 SPEC + PLAN. No code yet.
