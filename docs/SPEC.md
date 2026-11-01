@@ -1,6 +1,6 @@
 # OpenRamp: Specification
 
-Status: DRAFT v0.1 (Nov 1, 2026), awaiting Kwame's approval.
+Status: v0.1 APPROVED by Kwame (Nov 1, 2026).
 Anything marked **[confirm in Test X]** is an assumption about an external API that a feasibility
 test must prove before we build on it.
 

@@ -1,6 +1,6 @@
 # OpenRamp: Plan
 
-Status: DRAFT v0.1 (Nov 1, 2026), awaiting approval. Each task ≤ 2 h and has a check.
+Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 `[K]` = Kwame must do it by hand (accounts, keys, funding). Feature freeze: Nov 12.
 
 ## M0 Feasibility (Nov 1–3): prove the three risky integrations
