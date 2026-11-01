@@ -61,3 +61,19 @@ commit SHA (`https://raw.githubusercontent.com/Ikwame91/near-momo-p2p/<sha>/wasm
 `--hash`. Never put secrets there; secrets reach programs only as OutLayer secrets.
 Alternatives: FastFS (preferred when it is up; recheck each session), a separate public repo
 (not needed since this repo is public).
+
+## D-009 Security design update from the audit (Nov 1, 2026)
+Status: accepted (Kwame, "go")
+Context: A design audit of SPEC v0.1 found ways for an LP or buyer to take funds that the SPEC
+did not cover. Test A results (M0.4–M0.5) answered two of its findings (secret access, callback).
+Decision: SPEC v0.2 adds invariants 9–14 and THREAT_MODEL T23–T30:
+- Sell: seller commits to the payout recipient (salted hash); paying anyone else is NOT_PAID.
+- Buy: the TEE records the LP key fingerprint at registration; verdicts carry it; mismatch is
+  UNVERIFIABLE. The checkout is created in the TEE with the same key.
+- The contract sets OutLayer deposit/gas/limits. EVERY failure stays UNVERIFIED (we rejected the
+  audit's "buyer-caused errors don't count": the contract only sees `null` and an LP can cause
+  failures too by deleting or locking its secret). Slash needs `min_failed_attempts` spanning T_retry.
+- Verifier source, token and OutLayer id fixed at init; no full-access key (or stated upgrade trust).
+- References `opr-<deploy_tag>-<order_id>`; LP pause; per-LP new-buyer exposure cap.
+Alternatives: on-chain recipient number (rejected: privacy); Paystack integration id instead of
+key fingerprint (rejected: not in the verify response, checked 2026-11-01).

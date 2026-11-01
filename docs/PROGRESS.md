@@ -9,6 +9,98 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.10 security design update (docs only)
+Done: Reviewed Kwame's security audit (written before M0.4/M0.5). Already handled: #5 secret
+access (M0.5), #9 callback (M0.4), #10 (the real verifier fails closed). Adopted #1, #2, #4, #6, #7,
+#8 as SPEC v0.2 invariants 9–14 + THREAT_MODEL T23–T29; #3 adopted with a change (T30: every
+failure still counts, because an LP can cause failures too). #11 → PLAN M2.6. #12: moved
+`claude/agents/security-auditor.md` → `.claude/agents/` (merged main first: PR #1 + agent file).
+Checked: Paystack verify response has no integration id (field list only), so key fingerprint it is.
+Failed / blocked: none. No code changed.
+Next: M0.6 Test B (transfers + transfer verify; also check recipient fields for T23).
+
+## 2026-11-01 — Session 2: M0.5 DONE (Test A complete: real Paystack verdicts on OutLayer)
+Done: Kwame stored the real test key as OutLayer secret profile `paystack` (wasm-hash 021f85…c61,
+access allow-all via test-a.ikwame.testnet). All runs through `scripts/test-a/verify-run.sh`,
+contract test-a.ikwame.testnet, results stored by the callback:
+| Case | Reference | Stored verdict / reason | Tx |
+|---|---|---|---|
+| Real test MoMo payment | opr-test-a-paid-1 | PAID / ok | B69dGnWRqjZLGe2qn6ot5859t75jNQozdNn8rekcwWdF |
+| Reference not found | opr-test-a-missing-1 | NOT_PAID / not_found | DAwdwkw24Y5Mrv5YBhUmxjyujxqWuP4dVrNpfADZHFWu |
+| Abandoned (never paid) | opr-probe-modecheck-2 | NOT_PAID / not_success | 7B4Jy3Szjpm6YumSZGe6YuxmEtxrkbNxck48jkAbuRzD |
+| Expected 2000, paid 1000 | opr-test-a-paid-1 | NOT_PAID / amount_short | An3aApfZ3xKKcwPM3cchdNozKRe2nXTFjyUAUCv9MmQh |
+| Deadline before paid_at | opr-test-a-paid-1 | NOT_PAID / late | Bf1KiWeosu9HULw3cfGnAQ8jtarX79Q428ofpQj3SgbX |
+| Invalid key (profile bad-key) | opr-test-a-paid-1 | UNVERIFIABLE / auth_error | 6ZzC8kmJtBXCJ3s4EbRGk4DoJJjaUqXuauh7jSc1wuMd |
+| Real key called directly (not via contract) | — | refused: "Access denied by access condition" | vxWy9hD7zLdbPM6on1AR89kCXZ3Za4MrouXb4JQKPHn |
+Test A (SPEC Q1) is answered: call shape, deposit (~0.003 NEAR estimate; 0.001 base fee kept on
+failure), callback format, secret access, who can deliver the callback.
+Failed / blocked: none.
+Next: M0.6 Test B: Paystack test-mode mobile money transfer + transfer verify (the charge half
+is already proven above). Then M0.7 [K] fund mainnet dev account, M0.8 Test C.
+Gotchas: wasm outbound HTTPS works without any allowlist (no connector manifest). Paystack
+`paid_at` is ISO 8601 with milliseconds and `Z`.
+
+## 2026-11-01 — Session 2: M0.5 Test A part 3 (IN PROGRESS: waiting for Kwame to store the real key)
+Done:
+- Paystack key is TEST mode: `/transaction/initialize` (ref opr-probe-modecheck-2) then verify →
+  `domain: test`, status `abandoned`. Custom `opr-…` references accepted.
+- PAID fixture: `POST /charge` GHS 1000 pesewas, `mobile_money {phone 0551234987, provider mtn}`,
+  reference `opr-test-a-paid-1` → `success` / `Approved`, channel mobile_money, paid_at
+  2026-11-01T20:48:20Z (answers the charge half of SPEC Q2).
+- `scripts/test-a/paystack-verify`: pure `decide()` + `reference_is_valid()` in lib.rs, wasi-http
+  call in main.rs. `cargo test`: 15 passed. wasm sha256
+  021f8568f2cc9001e7060fedb02786fb02212b5e8ad8ffedd3f35c98b3d49c61, hosted in `wasm/` (commit 14ff01b).
+- test-a contract: `request()` now takes optional `secrets_ref`; 6 tests pass; redeployed
+  (tx 5GETLALTzZK7j1o3MLc4AjFSKMPGBVHY3sVybvmCV25G).
+- `scripts/test-a/verify-run.sh <profile> <reference>` runs one check through the contract.
+- UNVERIFIABLE (revoked/invalid key): secret profile `bad-key` = `sk_test_000…` (not a real key),
+  bound to the wasm hash, access `allow-all --via test-a.ikwame.testnet` →
+  `verify-run.sh bad-key opr-test-a-paid-1` → stored
+  `{"verdict":"UNVERIFIABLE","reason":"auth_error"}` (tx 6ZzC8kmJtBXCJ3s4EbRGk4DoJJjaUqXuauh7jSc1wuMd).
+- Access control works: same secret called directly by ikwame.testnet (not via the contract) →
+  "Access denied by access condition — signer ikwame.testnet, called from ikwame.testnet"
+  (tx BLA7e4tvgUPgWuHxCgVccHLtdRmuinHfx9SuGMh4P8z4).
+Failed: first try used `--access whitelist:test-a… --direct` → denied, because a Whitelist is
+checked against the SIGNER (ikwame.testnet). The right rule is `--access allow-all --via <contract>`
+= `Predecessor{Whitelist[contract]}`: any signer, but only through that contract. For the escrow
+this is what each LP stores (plus the build lock).
+Next: [K] store the real test key as profile `paystack` with the same binding/access, then run
+PAID (`opr-test-a-paid-1`) and NOT_PAID (`opr-test-a-missing-1`, and `opr-probe-modecheck-2` = abandoned).
+Gotchas: `outlayer secrets list` shows nothing for wasm-hash rows. Every verifier rebuild changes
+the hash, so the secret must be re-bound (`outlayer secrets access --build`) or re-stored.
+
+## 2026-11-01 — Session 2: M0.4 DONE (contract → OutLayer → callback)
+Done:
+- `scripts/test-a/contract` (near-sdk 5.30): `request(wasm_url, wasm_hash, input)` calls
+  `outlayer.testnet.request_execution` (200 TGas, deposit = attached) `.then(on_result)` (30 TGas,
+  `#[private]`); `on_result` sorts the result with `classify()` and stores it; `get_records` view.
+  `cargo test`: 6 passed (output / null / empty / not-JSON / too long / promise failed).
+  `cargo near build non-reproducible-wasm` OK. Deployed to test-a.ikwame.testnet (3 NEAR,
+  create tx Dd4nhjpQ1QS3K6amK6yNqq47z7pUmZ4PS1BdCkUmKv6U, deploy tx 3y9YaotkF3gbYS4batLRueKQghFhT7AZYcmXzaPhdkdH).
+- Run 1, real hello.wasm → stored `{"kind":"Output","value":{"input":{"command":"hello","order":"opr-7"},
+  "message":"Hello, ikwame.testnet!","success":true}}` (block 275800166). Attached 0.01 NEAR;
+  estimate_execution_cost said 0.0030001 NEAR.
+- Run 2, wrong hash (00…00) → OutLayer `"wasm_url content does not match its hash"`, charged
+  0.001 NEAR, refunded 0.009 → stored `{"kind":"RunFailed"}` (tx CD1r8t2AmjYsX7Keyt1pRfRvWrJfcSidsxgWvEHoMSMW).
+- Run 3, ikwame.testnet calls `on_result` directly → `Smart contract panicked: Method on_result is
+  private`; no record added (T13 confirmed).
+- `near view test-a.ikwame.testnet get_records` → exactly the 2 records above.
+- SPEC Q1 answers: call shape and deposit as above; our contract owns the `.then` callback,
+  OutLayer owns the yield (it resumes its own `on_execution_response`, whose return value is what
+  our callback gets). Result = program JSON on success, `null` on failed run, empty on promise
+  failure / timeout. Only the OutLayer operator can resolve a request (`assert_operator`).
+  `NEAR_SENDER_ID` in the wasm = the transaction signer (ikwame.testnet), not the calling contract.
+  Source: github.com/out-layer/outlayer contract/src/execution.rs, app.outlayer.ai/docs/near-integration.
+Findings for the escrow (added to THREAT_MODEL): T21: the escrow must fix the verifier wasm
+URL+hash itself, never take it from the caller. T22: operator trust, same as T17.
+Failed / blocked: none. Timeout path not triggered live (can't force OutLayer to stay silent);
+covered by reading the source + unit test.
+Next: M0.5 Test A part 3: wasm calls Paystack with the key from an OutLayer secret; PAID /
+NOT_PAID / UNVERIFIABLE. Needs Kwame to store the Paystack test key as an OutLayer secret.
+Gotchas: `PromiseError` is non_exhaustive (needs a catch-all arm; fail closed). Use
+`promise_result_checked` (old `promise_result` is deprecated). near CLI echoes the private key
+in its "re-run" hint: always filter output.
+
 ## 2026-11-01 — Session 2: M0.3 DONE (hello-world OutLayer run from the CLI)
 Done:
 - Repo is already PUBLIC (Kwame checked Settings; earlier notes saying "private" are outdated).
