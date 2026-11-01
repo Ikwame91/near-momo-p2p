@@ -9,6 +9,27 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-01 — Session 2: M0.5 DONE (Test A complete: real Paystack verdicts on OutLayer)
+Done: Kwame stored the real test key as OutLayer secret profile `paystack` (wasm-hash 021f85…c61,
+access allow-all via test-a.ikwame.testnet). All runs through `scripts/test-a/verify-run.sh`,
+contract test-a.ikwame.testnet, results stored by the callback:
+| Case | Reference | Stored verdict / reason | Tx |
+|---|---|---|---|
+| Real test MoMo payment | opr-test-a-paid-1 | PAID / ok | B69dGnWRqjZLGe2qn6ot5859t75jNQozdNn8rekcwWdF |
+| Reference not found | opr-test-a-missing-1 | NOT_PAID / not_found | DAwdwkw24Y5Mrv5YBhUmxjyujxqWuP4dVrNpfADZHFWu |
+| Abandoned (never paid) | opr-probe-modecheck-2 | NOT_PAID / not_success | 7B4Jy3Szjpm6YumSZGe6YuxmEtxrkbNxck48jkAbuRzD |
+| Expected 2000, paid 1000 | opr-test-a-paid-1 | NOT_PAID / amount_short | An3aApfZ3xKKcwPM3cchdNozKRe2nXTFjyUAUCv9MmQh |
+| Deadline before paid_at | opr-test-a-paid-1 | NOT_PAID / late | Bf1KiWeosu9HULw3cfGnAQ8jtarX79Q428ofpQj3SgbX |
+| Invalid key (profile bad-key) | opr-test-a-paid-1 | UNVERIFIABLE / auth_error | 6ZzC8kmJtBXCJ3s4EbRGk4DoJJjaUqXuauh7jSc1wuMd |
+| Real key called directly (not via contract) | — | refused: "Access denied by access condition" | vxWy9hD7zLdbPM6on1AR89kCXZ3Za4MrouXb4JQKPHn |
+Test A (SPEC Q1) is answered: call shape, deposit (~0.003 NEAR estimate; 0.001 base fee kept on
+failure), callback format, secret access, who can deliver the callback.
+Failed / blocked: none.
+Next: M0.6 Test B: Paystack test-mode mobile money transfer + transfer verify (the charge half
+is already proven above). Then M0.7 [K] fund mainnet dev account, M0.8 Test C.
+Gotchas: wasm outbound HTTPS works without any allowlist (no connector manifest). Paystack
+`paid_at` is ISO 8601 with milliseconds and `Z`.
+
 ## 2026-11-01 — Session 2: M0.5 Test A part 3 (IN PROGRESS: waiting for Kwame to store the real key)
 Done:
 - Paystack key is TEST mode: `/transaction/initialize` (ref opr-probe-modecheck-2) then verify →

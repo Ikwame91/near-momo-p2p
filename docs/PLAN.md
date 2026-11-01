@@ -16,7 +16,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [x] M0.4 Test A part 2: tiny testnet contract `scripts/test-a/contract` calls OutLayer
       `request_execution` and stores the callback result. Check: `near view` shows the stored result;
       record call args, deposit, callback shape, who can call the callback (SPEC Q1, T13).
-- [ ] M0.5 Test A part 3: WASM calls Paystack `GET /transaction/verify/:ref` with the key from an
+- [x] M0.5 Test A part 3: WASM calls Paystack `GET /transaction/verify/:ref` with the key from an
       OutLayer secret; contract receives PAID for a real test-mode payment, NOT_PAID for a fake ref,
       UNVERIFIABLE for a revoked key. Check: three runs, three verdicts.
 - [ ] M0.6 Test B: script `scripts/test-b` creates a test-mode GHS mobile money charge with a custom
@@ -39,7 +39,8 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Check: passes.
 
 ## M2 Verifier + real wiring (Nov 6–8)
-- [ ] M2.1 `verifier/` crate: `PaymentProvider` trait, Paystack adapter, verdict mapping, unit tests
+- [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
+      verdict logic + 15 tests): `PaymentProvider` trait, Paystack adapter, verdict mapping, unit tests
       with recorded test-mode responses. Check: tests.
 - [ ] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
 - [ ] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
