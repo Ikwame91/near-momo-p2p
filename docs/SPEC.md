@@ -1,7 +1,7 @@
 # OpenRamp: Specification
 
-Status: v0.2 APPROVED by Kwame (Nov 1, 2026). v0.2 adds the security fixes from the design audit
-(DECISIONS D-009, THREAT_MODEL T23–T30).
+Status: v0.3 APPROVED by Kwame (Nov 2, 2026). v0.2 added the design-audit fixes (D-009, T23–T30);
+v0.3 adds failure classes with an outage extension (D-012) and pawaPay sandbox payouts (D-011).
 Anything marked **[confirm in Test X]** is an assumption about an external API that a feasibility
 test must prove before we build on it.
 
@@ -88,18 +88,41 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
    - `NOT_PAID` → back to `AWAITING_PAYMENT` if before `pay_deadline + T_grace`, else `EXPIRED`
      (LP liquidity unlocked).
    - `UNVERIFIABLE`, wrong reference or `key_fp`, OutLayer error (`null`), no value, or yield
-     timeout → `UNVERIFIED`. All failures count: the contract cannot tell an outage from an LP
-     that deleted or locked its secret, so it fails closed (T30). Anyone may `claim` again.
+     timeout → `UNVERIFIED`. **Every failure ends in a slash if it never clears** (the buyer's
+     cedis are with the LP, off-chain; the bond is the only way to repay her, T30). Failures are
+     sorted into two classes (D-012), which only change *how long* the LP gets:
+
+     | Class | Results | Slash window |
+     |---|---|---|
+     | `LP_FAULT` | verifier `auth_error` / `no_key` (key revoked or missing), `key_fp` mismatch | `T_retry` |
+     | `OUTAGE` | verifier `server_error` / `network_error` / `unclear_4xx` / `malformed` / `unexpected_status`, provider IN_RECONCILIATION, OutLayer `null`, no value, yield timeout | `T_outage_max` |
+
+     If any failure in the current unverified streak is `LP_FAULT`, the window is `T_retry`;
+     otherwise `T_outage_max`. A buyer cannot produce an `LP_FAULT` result. An LP can make a run
+     fail with `null` (by deleting or locking its secret), but that only buys time up to
+     `T_outage_max`. Anyone (including the LP) may `claim` again at any time; a PAID result
+     releases and a NOT_PAID result after the deadline expires the order, ending the streak.
      Anyone may call `slash(order_id)` only when the order is still `UNVERIFIED` **and** it has
-     at least `min_failed_attempts` failed results, the first and last at least `T_retry` apart
-     (so a short outage cannot cause a slash). The buyer receives `usdc_amount` from the LP's
-     bond, the locked liquidity is unlocked back to the LP. State `SLASHED`.
+     at least `min_failed_attempts` failed results, the first and last at least the window apart.
+     The buyer receives `usdc_amount` from the LP's bond, the locked liquidity is unlocked back to
+     the LP. State `SLASHED`.
 6. Optional: buyer withdraws released USDC to another chain via `settlement/` (1Click).
 
 ## 5. Sell flow (USDC → cedis), two-step
-**Demo note (D-010):** the contract logic below is built and tested in full, but the payout check
-in step 3 uses a simulated provider in a separate, clearly labelled verifier build, because a
-Paystack Starter account cannot send transfers.
+**Demo note (D-010, D-011):** the contract logic below is built and tested in full. Payouts run
+on the **pawaPay sandbox** (Paystack Starter accounts cannot send transfers); the simulated
+provider stays as a fallback in a separate, clearly labelled verifier build. pawaPay specifics:
+- `payoutId` must be a UUID, so the contract derives one per order:
+  `payout_id = uuid_from(sha256("payout" ‖ deploy_tag ‖ order_id))`. pawaPay ignores a reused id
+  (`DUPLICATE_IGNORED`), which also blocks replays.
+- Phone numbers are committed and compared in one canonical form: `233` + 9 digits, no `+`,
+  no leading 0 (e.g. `233593456789`).
+- Amounts are strings (e.g. `"150"`, `"150.00"`); the verifier converts to pesewas exactly.
+- Status mapping (`GET /v2/payouts/{payoutId}`, https://docs.pawapay.io/v2/api-reference/payouts/check-payout-status):
+  `COMPLETED` + amount, currency, recipient phone and provider match → PAID; `FAILED`,
+  `NOT_FOUND`, or any mismatch → NOT_PAID; `ACCEPTED` / `ENQUEUED` / `PROCESSING` → NOT_PAID
+  for now (pending; the LP re-checks before the deadline); `IN_RECONCILIATION`, auth error, 5xx →
+  UNVERIFIABLE (classes as in §4.5).
 1. Seller sends USDC with `ft_transfer_call(msg: open_sell{lp, recipient_commitment})`, where
    `recipient_commitment = sha256(salt ‖ msisdn ‖ provider_code)` and `salt` is 32 random bytes the
    seller keeps (so the number cannot be brute-forced from the hash). Contract locks the USDC and
@@ -116,8 +139,10 @@ Paystack Starter account cannot send transfers.
    - Verdict `PAID` (transfer success, amount, currency, reference, recipient matches the
      commitment, LP `key_fp` matches) → USDC to LP (`RELEASED`). Paying any other wallet, including
      the LP's own, is NOT_PAID.
-   - `NOT_PAID` / `UNVERIFIABLE` → LP may retry until `payout_deadline + T_retry`; after that the
-     seller can `refund(order_id)` → USDC back to seller (`REFUNDED`). The LP controls the key and
+   - `NOT_PAID` / `UNVERIFIABLE` → LP may retry until `payout_deadline + T_retry`
+     (`+ T_outage_max` if every failure was `OUTAGE`, so an honest LP who paid is not refunded
+     against during a provider outage); after that the seller can `refund(order_id)` → USDC back
+     to seller (`REFUNDED`). The LP controls the key and
      the payout, so failure to prove the payout is the LP's risk.
 
 ## 6. Order states
@@ -141,10 +166,11 @@ flight per order. A callback for a request that is not the order's current one i
 |---|---|---|---|
 | `T_pay` | time to pay / pay out | 30 min | 10 min |
 | `T_grace` | extra time to claim after deadline | 15 min | 2 min |
-| `T_retry` | how long UNVERIFIABLE may persist before slash/refund | 24 h | 3 min |
+| `T_retry` | slash/refund window when a failure is the LP's fault (`LP_FAULT`) | 24 h | 3 min |
+| `T_outage_max` | slash/refund window when every failure is an outage (`OUTAGE`); hard limit | 72 h | 6 min |
 | `new_buyer_cap` | max USDC for an account's first N orders | 50 | 50 |
 | `release_delay` | delay before release for new buyers (reversal protection) | 1 h | 0 |
-| `min_failed_attempts` | failed verifications needed (spread over `T_retry`) before a slash | 3 | 2 |
+| `min_failed_attempts` | failed verifications needed (spread over the window) before a slash | 3 | 2 |
 | `outlayer_fee`, limits | deposit, gas and resource limits the contract uses for each verification | from `estimate_execution_cost` | same |
 | `new_buyer_exposure_max` | per LP, set by the LP: total open USDC with new buyers | LP's choice | LP's choice |
 
@@ -169,7 +195,9 @@ mainnet, mock USDC on testnet), `verifier` (wasm URL + sha256 or OutLayer projec
 10. A verdict counts only if it carries this order's reference and the LP's registered `key_fp`;
     anything else is UNVERIFIABLE.
 11. The contract, not the caller, sets the OutLayer deposit, gas and limits. Every failure is
-    UNVERIFIED, and a slash needs at least `min_failed_attempts` failures spanning `T_retry`.
+    UNVERIFIED and ends in a slash if it never clears. A slash needs at least
+    `min_failed_attempts` failures spanning `T_retry` (any `LP_FAULT` failure) or `T_outage_max`
+    (only `OUTAGE` failures). No failure class ever releases USDC or skips the slash.
 12. A payment reference is unique across deployments (`opr-<deploy_tag>-<order_id>`).
 13. A sell order is PAID only if the transfer went to the recipient the seller committed to.
 14. A paused LP gets no new orders; an LP's open USDC with new buyers never exceeds its
@@ -183,8 +211,11 @@ mainnet, mock USDC on testnet), `verifier` (wasm URL + sha256 or OutLayer projec
 - Partial fills, order books, LP reputation, multiple currencies besides GHS/USDC.
 - Disputes, arbiters, admin overrides (by design).
 - `agent-api/` x402 endpoint: DROPPED (D-010), needs real payouts.
-- Real mobile money payouts: the sell-flow payout check is simulated in the demo (D-010); real
-  payouts need a Paystack Registered Business or a licensed payout partner.
+- Real mobile money payouts: payouts run on the pawaPay sandbox in the demo (D-011), with the
+  simulated provider as fallback. Real money on any provider needs a licensed LP: Paystack and
+  pawaPay both require a legal business and ban or restrict crypto/unlicensed money transfer, and
+  Ghana's VASP Act 2025 (Act 1154) requires a licence for crypto services to the public. In
+  production OpenRamp is the trust layer between users and licensed LPs (D-011).
 
 ## 10. Open questions (resolve in M0)
 - Q1 (ANSWERED in M0.4–M0.5, see PROGRESS.md): Exact OutLayer `request_execution` args, deposit, secret access control and callback format

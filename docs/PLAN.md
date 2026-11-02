@@ -22,6 +22,12 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [x] M0.6 Test B (charge + verify PASS; transfers BLOCKED on Starter account → D-010): script `scripts/test-b` creates a test-mode GHS mobile money charge with a custom
       reference, verifies it, and creates + verifies a test-mode mobile money transfer. Check: script
       output (SPEC Q2).
+- [ ] M0.6b Test B2 pawaPay sandbox payouts (D-011). [K] sign up, generate a sandbox API token,
+      add it to the cloud environment's network secrets for api.sandbox.pawapay.io (never in chat).
+      Then `scripts/test-b/pawapay_payouts.py`: GET /v2/wallet-balances first (fund with a sandbox
+      deposit if empty), payouts to the Ghana COMPLETED / FAILED / pending test numbers, status
+      check incl. recipient phoneNumber, NOT_FOUND id. Korapay fallback if blocked > 1 day.
+      Check: script output.
 - [ ] M0.7 [K] Fund mainnet dev account with ~$3 USDC + a little NEAR. (approved exception D-004)
 - [ ] M0.8 Test C: script `scripts/test-c` gets a 1Click quote (dry run), then moves $1 USDC
       NEAR → Base. Check: tx hashes on both explorers, fee and time recorded (SPEC Q3).
@@ -37,8 +43,9 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
       exposure cap (inv. 14). Check: tests.
 - [ ] M1.5 Verdict handling behind a `Verifier` trait with a mock: PAID/NOT_PAID/UNVERIFIABLE paths,
       replay protection, reference + `key_fp` must match (inv. 1–3, 10). Check: tests.
-- [ ] M1.6 Retry window + slash with `min_failed_attempts`, contract-set OutLayer deposit/limits
-      (T5, T8, T25, T30, inv. 11). Check: tests with time travel.
+- [ ] M1.6 Retry window + slash with `min_failed_attempts`, failure classes `LP_FAULT` (`T_retry`) /
+      `OUTAGE` (`T_outage_max`), contract-set OutLayer deposit/limits (T5, T8, T25, T30, T31,
+      inv. 11, D-012). Check: tests with time travel.
 - [ ] M1.7 Balance accounting invariant (inv. 6) checked after every test. Check: tests.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26). Check: tests.
@@ -59,15 +66,20 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M2.5 Hostile review (PROMPTS.md §8) of contract + verifier; fix findings with tests.
 
 ## M3 Sell flow + settlement (Nov 8–10)
-- [ ] M3.1 Sell order: lock, recipient commitment (inv. 13, SPEC Q5), `confirm_received`, `claim_payout`
-      with transfer verify + recipient check, refund. Payout check via `PaymentProvider`; demo uses
-      `SimulatedPayout` in a separate verifier build (D-010). Check: tests.
-- [ ] M3.2 Testnet end-to-end sell with the simulated payout verifier, labelled as simulated (D-010).
+- [ ] M3.1 Sell order: lock, recipient commitment with canonical `233…` numbers (inv. 13, SPEC Q5),
+      UUID payout ids, `confirm_received`, `claim_payout` with pawaPay status + recipient check,
+      refund with outage extension. Payout check via `PaymentProvider`: pawaPay sandbox (D-011),
+      `SimulatedPayout` fallback in a separate labelled build (D-010). Check: tests.
+- [ ] M3.2 Testnet end-to-end sell with pawaPay sandbox payouts (fallback: simulated, labelled).
       Check: script + tx links.
 - [ ] M3.3 `settlement/`: withdraw released USDC to Base via 1Click (per D on SPEC Q4). Check: tx links.
 
 ## M4 Web demo (Nov 9–11)
 - [ ] M4.1 `web/` scaffold with NEAR wallet login. Check: runs locally.
+- [ ] M4.6 Demo script shows four outcomes live: PAID → release; NOT_PAID (wrong amount / wrong
+      recipient); UNVERIFIABLE `LP_FAULT` → slash; provider down → window extended to
+      `T_outage_max`, honest LP protected (D-012). Trigger for the outage case: TBD in M4
+      (likely the labelled simulated provider returning `server_error`). Check: recorded run.
 - [ ] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
 - [ ] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
 - [ ] M4.4 Seller screen. Check: manual run.
@@ -78,7 +90,8 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 
 ## M5 Submission (Nov 12–14) — feature freeze Nov 12
 - [ ] M5.1 README for judges (PROMPTS.md §9): do X → see Y, mermaid diagram, test-mode disclosure,
-      sell-flow payout is simulated and why (D-010),
+      payouts on the pawaPay sandbox and why (D-010, D-011), slash timing incl. the 72 h outage
+      limit and its residual risk (D-012), production = licensed LPs + Act 1154,
       libraries/AI code used, licensing note (Act 1154), limitations.
 - [ ] M5.2 Fresh clone → setup → demo from scratch; fix breakages.
 - [ ] M5.3 Secret scan of git history; add LICENSE check; make repo public [K approves].

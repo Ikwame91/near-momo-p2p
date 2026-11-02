@@ -9,6 +9,19 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-02 — Session 2: pawaPay decision + slash timing (docs only)
+Branch: `docs/pawapay-decision-and-slash-rule` (from main after PR #3).
+Done: D-011 (pawaPay sandbox for sell payouts, demo only; production = licensed LPs; Korapay
+fallback; pawaPay deposits deferred). D-012 (failure classes LP_FAULT / OUTAGE; T_retry 24 h,
+T_outage_max 72 h, demo 3 / 6 min; every failure still ends in a slash; reasoning recorded).
+SPEC v0.3 (§4.5 classes table, §5 pawaPay specifics: UUID payout ids, canonical 233 numbers,
+string amounts, status mapping; §7, inv. 11, §9), THREAT_MODEL T31, PLAN M0.6b (Test B2),
+M1.6, M3.1/3.2, M4.6 (four demo outcomes incl. provider-down extension), M5.1; README;
+.env.example. Checked: pawaPay sandbox needs no onboarding (how_to_start); prohibited list bans
+"unlicensed … money transfer".
+Failed / blocked: none. No code changed.
+Next: [K] pawaPay sandbox token → Test B2. Meanwhile M1.1 escrow scaffold.
+
 ## 2026-11-01 — Session 2: M0.6 closed with decision D-010 (buy flow is the main demo)
 Done: Kwame chose option 3. Recorded D-010; PLAN M0.6 ticked (charge PASS, transfers blocked),
 M3.1/M3.2 use a `SimulatedPayout` provider in a separate, labelled verifier build, S1 dropped,

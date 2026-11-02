@@ -96,3 +96,49 @@ Decision:
 - S1 (`agent-api/` x402: an agent pays a Ghana number in cedis) is dropped: it needs real payouts.
 Alternatives: upgrade Paystack (kept as an optional side track; if approved in time, switch
 the sell flow to real transfers); another payout provider (rejected: new research, 13 days left).
+
+## D-011 pawaPay sandbox for sell-flow payouts (demo only); production needs licensed LPs (Nov 2, 2026)
+Status: accepted (Kwame). Updates D-010.
+Context: Paystack Starter cannot send transfers (Test B). pawaPay (suggested by Jeffery, who is
+not on the project) gives an instant sandbox with no onboarding ("You do not need to go through
+the onboarding process for that since no real money is involved",
+https://docs.pawapay.io/v2/docs/how_to_start), Ghana test numbers for MTN, AirtelTigo and
+Vodafone/Telecel, and a payout status that returns the recipient's phone number and provider,
+which the T23 recipient check needs.
+Decision:
+- Buy flow stays on Paystack test mode (proven in M0.5).
+- Sell-flow payouts use the pawaPay sandbox behind the `PaymentProvider` interface; the
+  `SimulatedPayout` provider (D-010) stays as a labelled fallback.
+- pawaPay is a demo sandbox, NOT the production rail: its prohibited list bans "unlicensed …
+  money transfer" (https://www.pawapay.io/prohibited-business-activity), live access needs a legal
+  business, licences and compliance approval, and Act 1154 requires a VASP licence. In production,
+  LPs are licensed businesses or partners (e.g. Kotani Pay, Fonbnk) and OpenRamp is the trust
+  layer between them and users; buyers still never trust the LP.
+- Fallback: if pawaPay will not enable Ghana or fund the sandbox wallet within a day, use a
+  Korapay "Individual" test account.
+- Not now: pawaPay deposits for the buy flow (one account per LP, phone-prompt UX). Revisit only
+  after M2 if there is time.
+- M1 is not delayed; pawaPay code lands in M3.
+
+## D-012 Failure classes and slash timing (Nov 2, 2026)
+Status: accepted (Kwame)
+Context: An honest LP should not lose its bond to a provider outage, but an outage rule must not
+let a dishonest LP keep a buyer's cedis. In the buy flow the cedis are with the LP off-chain, so
+there is nothing to refund; the bond is the buyer's only remedy. An LP can also cause a run to
+fail with `null` (delete or lock its secret), which looks exactly like an OutLayer outage.
+Decision: every failure still ends in a slash if it never clears; failures are classed only to
+set the time allowed (SPEC §4.5): `LP_FAULT` (key rejected/missing, key fingerprint mismatch) →
+`T_retry` = 24 h; `OUTAGE` only (provider 5xx/timeouts/unclear answers/IN_RECONCILIATION,
+OutLayer `null`, yield timeout) → `T_outage_max` = 72 h. Demo: 3 min and 6 min. Same windows for
+sell-flow refunds, mirrored.
+Why 72 h: covers outages of minutes to hours with a wide margin, a full-day provider or telco
+incident, and one that starts on a Friday evening; the buyer is paid as soon as the provider
+recovers, so 72 h is the worst case, not the normal wait. Shorter (48 h) risks slashing honest
+LPs over a weekend incident; longer (7 days) leaves a buyer without cedis or USDC for a week and
+keeps the LP's liquidity and bond locked. Why an LP gains nothing by faking an outage: it only
+delays the same slash by 48 h. Residual risk: an outage longer than 72 h on an order the buyer
+never paid; accepted and stated in the README. Values are deploy parameters copied into each
+order (T20).
+Alternatives: no slash during outages, refund the buyer instead (rejected: nothing to refund in
+the buy flow, and it would excuse an LP that deletes its secret); one window for all failures
+(rejected: harsher on honest LPs for no gain).
