@@ -19,7 +19,7 @@ Owner: Kwame (all modules) for now.
   show one (confirm in Test A). Provider is a plug-in behind an interface, so it can be swapped
   for a licensed partner.
 - `settlement/`: NEAR Intents (1Click API) integration for cross-chain USDC in/out.
-- `agent-api/` (STRETCH, only after the buy flow works end to end): x402 endpoint so AI agents
+- `agent-api/` (DROPPED, DECISIONS D-010: needs real payouts): x402 endpoint so AI agents
   can pay a Ghanaian phone number in cedis. Needs the full sell flow plus Paystack payouts.
 - `web/`: minimal frontend for buyer, seller and LP flows.
 - `scripts/`: feasibility tests and dev scripts (`scripts/test-a`, `test-b`, `test-c`).

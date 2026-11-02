@@ -77,3 +77,22 @@ Decision: SPEC v0.2 adds invariants 9–14 and THREAT_MODEL T23–T30:
 - References `opr-<deploy_tag>-<order_id>`; LP pause; per-LP new-buyer exposure cap.
 Alternatives: on-chain recipient number (rejected: privacy); Paystack integration id instead of
 key fingerprint (rejected: not in the verify response, checked 2026-11-01).
+
+## D-010 Buy flow is the main demo; sell-flow payout check is simulated (Nov 1, 2026)
+Status: accepted (Kwame, option 3)
+Context: Test B (M0.6) showed a Paystack Starter business cannot send transfers, even in test
+mode ("You cannot initiate third party payouts as a starter business"); a Registered Business
+upgrade needs business papers and may take days. The buy flow only receives payments, which work.
+Decision:
+- The buy flow (cedis → USDC) is the main, fully real demo (Paystack test mode + OutLayer TEE).
+- The sell flow is still built and tested in the contract (lock, recipient commitment,
+  confirm_received, claim_payout, refund). Only the "did the payout land" check is simulated, by a
+  `SimulatedPayout` provider behind the `PaymentProvider` interface.
+- The simulated provider is a SEPARATE verifier build with its own wasm hash, used only by a
+  demo deployment that the README and UI label "simulated payout". It is never part of the
+  buy-flow verifier and never used with real money (it would be a release backdoor).
+- The README states plainly that real payouts need a Registered Business on Paystack or a
+  licensed payout partner.
+- S1 (`agent-api/` x402: an agent pays a Ghana number in cedis) is dropped: it needs real payouts.
+Alternatives: upgrade Paystack (kept as an optional side track; if approved in time, switch
+the sell flow to real transfers); another payout provider (rejected: new research, 13 days left).
