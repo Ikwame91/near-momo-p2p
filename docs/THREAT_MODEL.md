@@ -1,6 +1,6 @@
 # OpenRamp: Threat Model
 
-Status: v0.2 (Nov 1, 2026), adds T23–T30 from the design audit (DECISIONS D-009). Rule: no defence may rely on an admin or arbiter.
+Status: v0.3 (Nov 2, 2026). v0.2 added T23–T30 (D-009); v0.3 adds T31 and the outage class (D-012). Rule: no defence may rely on an admin or arbiter.
 Each row maps to a test (filled in as tests are written).
 
 | # | Attacker | Attack | Defence | Test |
@@ -35,3 +35,4 @@ Each row maps to a test (filled in as tests are written).
 | T28 | Anyone | Keep reopening orders against an LP so it never reaches zero open orders and can never withdraw its bond or rotate a leaked key | `pause_lp()` blocks new orders so the LP can drain to zero (inv. 14) | — |
 | T29 | Buyer | Bypass the per-account new-buyer cap with many free NEAR accounts (reversal fraud) | Per-LP `new_buyer_exposure_max`, set by the LP (inv. 14) | — |
 | T30 | LP | Make runs fail on purpose (delete the secret, change its access rule) so failures never count against it | The contract only sees `null` and cannot tell who caused a failure, so every failure counts as UNVERIFIED and ends in a slash after the retry window (fails closed) (SPEC §4.5, inv. 11) | — |
+| T31 | Provider / OutLayer outage | A long Paystack, pawaPay or OutLayer outage makes an honest LP's checks fail, and the LP is slashed although the buyer never paid | Failures are classed (SPEC §4.5): outage-only streaks get `T_outage_max` (72 h) instead of `T_retry` (24 h), and any successful re-check (PAID or NOT_PAID) ends the streak. Still ends in a slash at the hard limit, because an LP-caused `null` looks the same as an outage (T30). Residual risk: an outage longer than 72 h on an unpaid order; accepted and stated in the README (D-012) | — |

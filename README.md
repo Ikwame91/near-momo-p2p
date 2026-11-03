@@ -8,7 +8,10 @@ Built for the NEAR Hackathon (Nov 1–14, 2026). Work in progress: see `docs/SPE
 
 **Status:** testnet + Paystack test mode only. No real money.
 
-**Buy flow (cedis → USDC) is real:** Paystack test-mode mobile money payments checked inside an
-OutLayer TEE. **Sell flow (USDC → cedis): the payout check is simulated.** The contract logic is
-built and tested, but a Paystack Starter business account cannot send transfers; real payouts need
-a Paystack Registered Business or a licensed payout partner. See `docs/DECISIONS.md` D-010.
+**Buy flow (cedis → USDC):** Paystack test-mode mobile money payments, checked inside an
+OutLayer TEE. **Sell flow (USDC → cedis):** payouts run on the **pawaPay sandbox** (a Paystack
+Starter account cannot send transfers), with a clearly labelled simulated check as fallback.
+Real money needs licensed liquidity providers: payment providers require a registered business
+and restrict crypto, and Ghana's VASP Act 2025 (Act 1154) requires a licence. In production,
+OpenRamp is the trust layer between users and licensed LPs; users still never have to trust the
+LP. See `docs/DECISIONS.md` D-010 to D-012.
