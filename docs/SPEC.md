@@ -121,7 +121,8 @@ provider stays as a fallback in a separate, clearly labelled verifier build. paw
   (`DUPLICATE_IGNORED`), which also blocks replays.
 - Phone numbers are committed and compared in one canonical form: `233` + 9 digits, no `+`,
   no leading 0 (e.g. `233593456789`).
-- Amounts are strings (e.g. `"150"`, `"150.00"`); the verifier converts to pesewas exactly.
+- Amounts are strings; pawaPay may echo a different format than sent (Test B2: sent `"5"`,
+  status returned `"5.00"`), so the verifier converts both to pesewas and compares numbers.
 - Status mapping (`GET /v2/payouts/{payoutId}`, https://docs.pawapay.io/v2/api-reference/payouts/check-payout-status):
   `COMPLETED` + amount, currency, recipient phone and provider match → PAID; `FAILED`,
   `NOT_FOUND`, or any mismatch → NOT_PAID; `ACCEPTED` / `ENQUEUED` / `PROCESSING` → NOT_PAID

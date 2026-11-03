@@ -22,7 +22,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [x] M0.6 Test B (charge + verify PASS; transfers BLOCKED on Starter account → D-010): script `scripts/test-b` creates a test-mode GHS mobile money charge with a custom
       reference, verifies it, and creates + verifies a test-mode mobile money transfer. Check: script
       output (SPEC Q2).
-- [ ] M0.6b Test B2 pawaPay sandbox payouts (D-011). [K] sign up, generate a sandbox API token,
+- [x] M0.6b Test B2 pawaPay sandbox payouts (D-011). All checks PASS (Nov 3). [K] sign up, generate a sandbox API token,
       add it to the cloud environment's network secrets for api.sandbox.pawapay.io (never in chat).
       Then `scripts/test-b/pawapay_payouts.py`: GET /v2/wallet-balances first (fund with a sandbox
       deposit if empty), payouts to the Ghana COMPLETED / FAILED / pending test numbers, status
@@ -83,7 +83,8 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M4.1 `web/` scaffold with NEAR wallet login. Check: runs locally.
 - [ ] M4.6 Demo script shows four outcomes live: PAID → release; NOT_PAID (wrong amount / wrong
       recipient); UNVERIFIABLE `LP_FAULT` → slash; provider down → window extended to
-      `T_outage_max`, honest LP protected (D-012). Trigger for the outage case: TBD in M4
+      `T_outage_max`, honest LP protected (D-012). Trigger for the outage case: sell flow → pawaPay
+      sandbox number 233593456129 returns IN_RECONCILIATION (observed in Test B2); buy flow → TBD
       (likely the labelled simulated provider returning `server_error`). Check: recorded run.
 - [ ] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
 - [ ] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
