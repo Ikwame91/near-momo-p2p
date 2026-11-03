@@ -9,6 +9,31 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: PR #9 review fix-ups (2 reviewers, D-019)
+Reviewers found no fund-safety bug. Fixed in commit 96f3acb (code + SPEC) and the following docs
+commits (my docs script stopped twice on text that did not match; re-applied file by file):
+- `unlock`: amount > 0, "no open orders" and "unlock exceeds locked" as separate checks (a 0-amount
+  unlock would have dropped open_orders while USDC stayed locked).
+- Profile names limited to A-Z a-z 0-9 - _ ; message "secret_ref must belong to the caller".
+- `Pot` serializes as "bond" / "liquidity" (decided before any indexer depends on it).
+- `#[cfg_attr(not(test), expect(dead_code))]` so the attribute warns once M1.4 uses the helpers.
+- Tests: exact event payloads, bond withdraw event, a distinctive profile checked absent from logs
+  by value, registration cost identical for 1- and 64-char profiles, 64-char boundary, free-text
+  profile rejected, empty profile, unregistered caller, same-ref re-set clears key_fp, lock 0,
+  unlock 0, unlock with no open orders, first pause emits.
+- Mutation check: re-applied the reviewer's surviving mutations (drop profile_room charge, wrong pot
+  in withdraw event, wrong max in quote event, drop lock amount > 0): each now fails a test.
+- Design rules recorded: PLAN M1.4, M1.6, M2.2c (fingerprint callback + secret_gen), M3.1 (sell
+  orders count in open_orders). SPEC §3.6. THREAT_MODEL T19/T28/T34 tests. DECISIONS D-019.
+```
+$ cd contracts && cargo test
+test result: ok. 119 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.24s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+$ cargo clippy --all-targets 2>&1 | grep -cE '^(warning|error)'
+0
+```
+Next: merge PR #9 after checks; M1.4 buy orders.
+
 ## 2026-11-03 — Session 3: M1.3 DONE (events, provider limit, secret lock, bond rule, pause)
 Branch: `escrow/events-provider-and-bond-lock`. Process (Kwame, Nov 3): Claude merges PRs after
 tests + checks pass and reviewer subagents have reviewed; Kwame reviews afterwards.

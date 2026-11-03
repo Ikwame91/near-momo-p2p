@@ -240,3 +240,12 @@ Evidence: sandbox payout 887bab2b-7ee9-4b75-8b4c-c3f70331daef, status reply
 `"metadata": {"openrampSalt": "786047a8…67475"}`, identical to the salt sent (PROGRESS Nov 3).
 Alternatives: salt as OutLayer input (rejected: on-chain, brute-forceable); per-order OutLayer
 secret written by the LP (works, heavier; fallback if pawaPay metadata ever changes).
+
+## D-019 PR process: reviewer subagents, then Claude merges (Nov 3, 2026)
+Status: accepted (Kwame: "you can merge PRs going forward"; "after every PR you call subagents to
+review")
+Decision: for every PR, Claude runs `cargo test`, clippy and the build, opens the PR, runs reviewer
+subagents (security + code/test), fixes their findings with tests, re-runs everything, waits for
+GitHub checks, then merges. Kwame reviews afterwards. This replaces the AGENTS.md "ask before
+merging unreviewed money logic" rule in practice; the AGENTS.md wording should be updated with
+Kwame's approval of the diff.
