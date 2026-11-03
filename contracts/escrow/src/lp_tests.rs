@@ -420,7 +420,7 @@ fn withdraw_zero_fails() {
 }
 
 #[test]
-#[should_panic(expected = "provider name must be 1-32 chars")]
+#[should_panic(expected = "provider must be \"paystack\" or \"pawapay\"")]
 fn register_with_empty_provider_fails() {
     let mut e = deployed();
     as_(LP, NearToken::from_millinear(100));
@@ -428,7 +428,7 @@ fn register_with_empty_provider_fails() {
 }
 
 #[test]
-#[should_panic(expected = "provider name must be 1-32 chars")]
+#[should_panic(expected = "provider must be \"paystack\" or \"pawapay\"")]
 fn register_with_long_provider_fails() {
     let mut e = deployed();
     as_(LP, NearToken::from_millinear(100));

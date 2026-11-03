@@ -9,6 +9,35 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: M1.3 DONE (events, provider limit, secret lock, bond rule, pause)
+Branch: `escrow/events-provider-and-bond-lock`. Process (Kwame, Nov 3): Claude merges PRs after
+tests + checks pass and reviewer subagents have reviewed; Kwame reviews afterwards.
+Done (`src/events.rs`, `src/lp.rs`, `src/lp_m13_tests.rs`):
+- NEP-297 events (standard "openramp" 1.0.0) for every LP action; tests check no secret profile
+  appears in the logs.
+- Provider exactly "paystack" | "pawapay" (D-017). Two older tests kept; their expected message
+  changed because the rule deliberately changed (1-32 chars → exact names).
+- `set_secret_ref` (1 yocto, zero open orders, own secret only, clears key_fp); registration now
+  also reserves storage for a 64-char profile; test proves the growth stays within what was paid.
+- `pause_lp` / `resume_lp` (1 yocto, event only on change).
+- Internal `lock_for_buy` (paystack LP, not paused, key_fp set, liquidity, bond rule
+  locked + amount ≤ bond) and `unlock` (back to liquidity or released), for M1.4.
+```
+$ cd contracts && cargo test
+     Running unittests src/lib.rs (target/debug/deps/openramp_escrow-d81469ffa25a38a7)
+test result: ok. 109 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.84s
+     Running unittests src/lib.rs (target/debug/deps/openramp_mock_ft-f436da86f5147f23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+$ cargo clippy --all-targets   (no warnings)
+$ cd escrow && cargo near build non-reproducible-wasm   → Finished cargo near build in 12s
+```
+Failed / blocked: first run: 2 expected failures (provider rule change); then one test bug (a new
+test context resets the mock storage counter, so the storage-growth test now measures inside one
+context). Fixed; no test weakened.
+Next: reviewer subagents on the PR, fix findings, merge, then M1.4 buy orders.
+
 ## 2026-11-03 — Session 3: design decisions before M1.4 + Q5 sandbox proof (docs only)
 Branch: `docs/design-decisions-before-m1-4` (from main after PR #7).
 Q5 proof (`python3 scripts/test-b/pawapay_metadata_probe.py`, raw output, phone masked):

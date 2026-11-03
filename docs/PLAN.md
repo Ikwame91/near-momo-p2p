@@ -39,7 +39,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [x] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
 - [x] M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals. Check: tests.
 Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 scope review).
-- [ ] M1.3 [must] (first) NEP-297 events for LP actions (register, deposit, withdraw, quote change)
+- [x] M1.3 [must] (first) NEP-297 events for LP actions (register, deposit, withdraw, quote change)
       with no PII; provider limited to `"paystack" | "pawapay"` (D-017). Then bond/secret lock while
       orders open (inv. 4), bond rule (inv. 5), `pause_lp` / `resume_lp` with 1 yocto (inv. 14,
       T34). Check: failing→passing tests.

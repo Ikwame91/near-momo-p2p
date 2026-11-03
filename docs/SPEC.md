@@ -50,8 +50,14 @@ in the same transaction as the deploy (invariant 9, T32).
 3. Deposit liquidity (USDC, msg `liquidity`) for buy orders.
 4. Update rate/min/max at any time (applies to new orders only).
 5. Withdraw liquidity that is not locked in an order: any time.
-6. Withdraw bond or change `secret_ref` (which re-runs `fingerprint`): only when the LP has
-   **zero open orders**.
+6. Withdraw bond or change `secret_ref` (`set_secret_ref`, 1 yocto; clears `key_fp` so the new key
+   must be fingerprinted before new orders): only when the LP has **zero open orders**.
+   Registration pays storage for the longest profile name (64 chars) and the `key_fp`, so these
+   changes never grow unpaid storage.
+   LP actions emit NEP-297 events (`standard: "openramp"`, version `1.0.0`): `lp_registered`,
+   `deposit`, `withdraw_requested`, `withdraw_recredited`, `quote_updated`, `secret_ref_changed`,
+   `lp_paused`, `lp_resumed`. Events never contain phone numbers, keys, secret profile names or
+   salts.
 7. `pause_lp()` / `resume_lp()`: a paused LP gets no new orders; open orders run to the end. This
    lets an LP reach zero open orders even if someone keeps opening orders (T28).
 

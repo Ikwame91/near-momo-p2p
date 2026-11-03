@@ -10,11 +10,15 @@ use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
 use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 
+mod events;
 mod lp;
-pub use lp::{Lp, Pot, Quote, SecretRef};
+pub use events::Event;
+pub use lp::{Lp, Pot, Quote, SecretRef, PROVIDERS};
 
 #[cfg(test)]
 mod lp_tests;
+#[cfg(test)]
+mod lp_m13_tests;
 
 #[near]
 #[derive(BorshStorageKey)]
