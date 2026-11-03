@@ -34,7 +34,8 @@ in the same transaction as the deploy (invariant 9, T32).
 
 ## 3. LP lifecycle
 1. `register_lp(provider, secret_ref, rate_ghs_per_usdc, min, max, new_buyer_exposure_max)`:
-   registers which OutLayer secret holds the LP's Paystack key and the LP's quote. The contract then
+   registers which OutLayer secret holds the LP's Paystack key and the LP's quote. The secret must
+   be the LP's own (`secret_ref.account_id` = the LP; T33). The contract then
    runs the verifier once in `fingerprint` mode: inside the TEE it reads the key and returns
    `key_fp = sha256(key)`, which the contract stores. The LP takes no orders until `key_fp` is set.
    The LP stores the secret bound to the verifier wasm hash and readable only via the escrow
@@ -174,7 +175,7 @@ flight per order. A callback for a request that is not the order's current one i
 | `T_outage_max` | slash/refund window when every failure is an outage (`OUTAGE`); hard limit | 72 h | 6 min |
 | `new_buyer_cap` | max USDC for an account's first N orders | 50 | 50 |
 | `release_delay` | delay before release for new buyers (reversal protection) | 1 h | 0 |
-| `min_failed_attempts` | failed verifications needed (spread over the window) before a slash | 3 | 2 |
+| `min_failed_attempts` | failed verifications needed (spread over the window) before a slash; 2–10 (1 could never span a window) | 3 | 2 |
 | `outlayer_call` | per verification: `fee` (yoctoNEAR deposit), `gas_tgas` (100–250), `callback_gas_tgas` (≥ 10; gas + callback ≤ 280), `max_instructions` (≤ 500e9), `max_memory_mb` (≤ 4096), `max_execution_seconds` (≤ 180) | fee from `estimate_execution_cost` | fee 0.01 NEAR, 200 + 30 TGas, 1e9 instr, 128 MB, 20 s |
 | `new_buyer_exposure_max` | per LP, set by the LP: total open USDC with new buyers | LP's choice | LP's choice |
 
@@ -182,8 +183,11 @@ Everything above and below is fixed at deploy; no setter exists (invariant 9, D-
 (accepted USDC contract; native USDC on mainnet, mock USDC on testnet), `verifier` (wasm URL +
 sha256 or OutLayer project + version), `outlayer` contract id, `deploy_tag`, and all parameters
 in the table. `new` rejects: token = outlayer, either = the contract itself, a non-https verifier
-URL, a hash that is not 64 lowercase hex chars, zero `t_pay` / `t_retry` / fee, `t_outage_max <
-t_retry`, `min_failed_attempts = 0`, OutLayer limits outside the ranges above.
+URL, a hash that is not 64 lowercase hex chars, zero `t_pay` / `t_retry` / fee / `new_buyer_cap`,
+`t_outage_max < t_retry`, `min_failed_attempts` outside 2–10, OutLayer limits outside the ranges
+above, and values over the ceilings (D-016): `t_pay` and `t_grace` ≤ 24 h, `t_retry` and
+`t_outage_max` ≤ 7 days, `release_delay` ≤ 24 h, OutLayer fee ≤ 1 NEAR. Because settings are
+permanent, the ceilings stop a deployment whose slash can never happen in practice.
 
 ## 8. Invariants (each one gets a test)
 1. USDC is released only on a PAID verdict from the OutLayer callback for this order's current

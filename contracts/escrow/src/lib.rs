@@ -7,7 +7,20 @@
 //! LPs, orders and verdicts arrive in M1.2+.
 
 use near_sdk::json_types::U128;
-use near_sdk::{env, near, require, AccountId, PanicOnDefault};
+use near_sdk::store::LookupMap;
+use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
+
+mod lp;
+pub use lp::{Lp, Pot, Quote, SecretRef};
+
+#[cfg(test)]
+mod lp_tests;
+
+#[near]
+#[derive(BorshStorageKey)]
+enum StorageKey {
+    Lps,
+}
 
 /// Which OutLayer program checks payments. Fixed at deploy (invariant 9, T21, T26).
 #[near(serializers = [json, borsh])]
@@ -45,6 +58,21 @@ pub const OUTLAYER_MAX_SECONDS: u32 = 180;
 /// bookkeeping (M0.4 used 200 TGas successfully).
 pub const MIN_OUTLAYER_GAS_TGAS: u64 = 100;
 pub const MIN_CALLBACK_GAS_TGAS: u64 = 10;
+/// SPEC §7 range for the OutLayer call itself.
+pub const MAX_OUTLAYER_GAS_TGAS: u64 = 250;
+/// Ceilings: settings are permanent, so absurd values (e.g. a 100-year outage window that makes
+/// slashing meaningless) must be impossible to deploy (SPEC §7).
+pub const NS_PER_HOUR: u64 = 3_600_000_000_000;
+pub const MAX_T_PAY_NS: u64 = 24 * NS_PER_HOUR;
+pub const MAX_T_GRACE_NS: u64 = 24 * NS_PER_HOUR;
+pub const MAX_T_RETRY_NS: u64 = 7 * 24 * NS_PER_HOUR;
+pub const MAX_T_OUTAGE_NS: u64 = 7 * 24 * NS_PER_HOUR;
+pub const MAX_RELEASE_DELAY_NS: u64 = 24 * NS_PER_HOUR;
+pub const MAX_OUTLAYER_FEE_YOCTO: u128 = 1_000_000_000_000_000_000_000_000; // 1 NEAR
+/// A slash needs >= 2 failures with the first and last a full window apart (SPEC §4.5); with 1 the
+/// window could never be met.
+pub const MIN_FAILED_ATTEMPTS: u8 = 2;
+pub const MAX_FAILED_ATTEMPTS: u8 = 10;
 /// A transaction can carry at most 300 TGas; leave room for `claim` itself.
 pub const MAX_TOTAL_CALL_GAS_TGAS: u64 = 280;
 
@@ -82,6 +110,7 @@ pub struct Escrow {
     verifier: VerifierSource,
     params: Params,
     deploy_tag: String,
+    lps: LookupMap<AccountId, Lp>,
 }
 
 /// First 8 hex chars of sha256(contract_id ":" init_block_height), height in decimal
@@ -109,10 +138,21 @@ fn validate(me: &AccountId, token: &AccountId, outlayer: &AccountId, verifier: &
     require!(p.t_pay_ns > 0, "t_pay must be > 0");
     require!(p.t_retry_ns > 0, "t_retry must be > 0");
     require!(p.t_outage_max_ns >= p.t_retry_ns, "t_outage_max must be >= t_retry");
-    require!(p.min_failed_attempts >= 1, "min_failed_attempts must be >= 1");
+    require!(p.t_pay_ns <= MAX_T_PAY_NS, "t_pay too long");
+    require!(p.t_grace_ns <= MAX_T_GRACE_NS, "t_grace too long");
+    require!(p.t_retry_ns <= MAX_T_RETRY_NS, "t_retry too long");
+    require!(p.t_outage_max_ns <= MAX_T_OUTAGE_NS, "t_outage_max too long");
+    require!(p.release_delay_ns <= MAX_RELEASE_DELAY_NS, "release_delay too long");
+    require!(
+        (MIN_FAILED_ATTEMPTS..=MAX_FAILED_ATTEMPTS).contains(&p.min_failed_attempts),
+        "min_failed_attempts must be 2-10"
+    );
+    require!(p.new_buyer_cap.0 > 0, "new_buyer_cap must be > 0");
     let c = &p.outlayer_call;
     require!(c.fee.0 > 0, "outlayer fee must be > 0");
+    require!(c.fee.0 <= MAX_OUTLAYER_FEE_YOCTO, "outlayer fee too high");
     require!(c.gas_tgas >= MIN_OUTLAYER_GAS_TGAS, "outlayer gas too low");
+    require!(c.gas_tgas <= MAX_OUTLAYER_GAS_TGAS, "outlayer gas too high");
     require!(c.callback_gas_tgas >= MIN_CALLBACK_GAS_TGAS, "callback gas too low");
     require!(c.gas_tgas + c.callback_gas_tgas <= MAX_TOTAL_CALL_GAS_TGAS, "outlayer + callback gas too high");
     require!(
@@ -138,7 +178,7 @@ impl Escrow {
         require!(env::predecessor_account_id() == me, "only the contract account can initialise it");
         validate(&me, &token, &outlayer, &verifier, &params);
         let deploy_tag = compute_deploy_tag(&me, env::block_height());
-        Self { token, outlayer, verifier, params, deploy_tag }
+        Self { token, outlayer, verifier, params, deploy_tag, lps: LookupMap::new(StorageKey::Lps) }
     }
 
     pub fn get_config(&self) -> ConfigView {
@@ -153,19 +193,19 @@ impl Escrow {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use near_sdk::test_utils::VMContextBuilder;
     use near_sdk::testing_env;
 
     const MIN: u64 = 60_000_000_000;
-    const ME: &str = "escrow.testnet";
+    pub(crate) const ME: &str = "escrow.testnet";
 
-    fn acc(s: &str) -> AccountId {
+    pub(crate) fn acc(s: &str) -> AccountId {
         s.parse().unwrap()
     }
 
-    fn params() -> Params {
+    pub(crate) fn params() -> Params {
         // Demo values from SPEC §7; OutLayer values as used in Test A (M0.4/M0.5).
         Params {
             t_pay_ns: 10 * MIN,
@@ -186,7 +226,7 @@ mod tests {
         }
     }
 
-    fn verifier() -> VerifierSource {
+    pub(crate) fn verifier() -> VerifierSource {
         VerifierSource::WasmUrl {
             url: "https://raw.githubusercontent.com/Ikwame91/near-momo-p2p/abc/wasm/verifier.wasm".into(),
             hash: "021f8568f2cc9001e7060fedb02786fb02212b5e8ad8ffedd3f35c98b3d49c61".into(),
@@ -194,7 +234,7 @@ mod tests {
     }
 
     /// Context where the contract calls itself (as in a deploy + init batch).
-    fn ctx(height: u64) {
+    pub(crate) fn ctx(height: u64) {
         testing_env!(VMContextBuilder::new()
             .current_account_id(acc(ME))
             .predecessor_account_id(acc(ME))
@@ -202,7 +242,7 @@ mod tests {
             .build());
     }
 
-    fn init_with(verifier: VerifierSource, p: Params) -> Escrow {
+    pub(crate) fn init_with(verifier: VerifierSource, p: Params) -> Escrow {
         Escrow::new(acc("usdc.testnet"), acc("outlayer.testnet"), verifier, p)
     }
 
@@ -364,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "min_failed_attempts must be >= 1")]
+    #[should_panic(expected = "min_failed_attempts must be 2-10")]
     fn rejects_zero_failed_attempts() {
         let mut p = params();
         p.min_failed_attempts = 0;
@@ -401,8 +441,9 @@ mod tests {
     #[should_panic(expected = "outlayer + callback gas too high")]
     fn rejects_total_gas_over_limit() {
         let mut p = params();
-        p.outlayer_call.gas_tgas = 260;
-        p.outlayer_call.callback_gas_tgas = 30;
+        // Each value is within its own range; only the sum (281) is over the limit.
+        p.outlayer_call.gas_tgas = MAX_OUTLAYER_GAS_TGAS;
+        p.outlayer_call.callback_gas_tgas = 31;
         init_params(p);
     }
 
@@ -435,6 +476,101 @@ mod tests {
     fn rejects_too_many_seconds() {
         let mut p = params();
         p.outlayer_call.max_execution_seconds = OUTLAYER_MAX_SECONDS + 1;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "min_failed_attempts must be 2-10")]
+    fn rejects_one_failed_attempt() {
+        let mut p = params();
+        p.min_failed_attempts = 1;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "min_failed_attempts must be 2-10")]
+    fn rejects_eleven_failed_attempts() {
+        let mut p = params();
+        p.min_failed_attempts = 11;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "outlayer gas too high")]
+    fn rejects_outlayer_gas_above_250() {
+        let mut p = params();
+        p.outlayer_call.gas_tgas = 251;
+        p.outlayer_call.callback_gas_tgas = 10;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "t_outage_max too long")]
+    fn rejects_outage_window_over_7_days() {
+        let mut p = params();
+        p.t_outage_max_ns = MAX_T_OUTAGE_NS + 1;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "t_retry too long")]
+    fn rejects_retry_window_over_7_days() {
+        let mut p = params();
+        p.t_retry_ns = MAX_T_RETRY_NS + 1;
+        p.t_outage_max_ns = MAX_T_RETRY_NS + 1;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "t_pay too long")]
+    fn rejects_t_pay_over_24h() {
+        let mut p = params();
+        p.t_pay_ns = MAX_T_PAY_NS + 1;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "t_grace too long")]
+    fn rejects_t_grace_over_24h() {
+        let mut p = params();
+        p.t_grace_ns = MAX_T_GRACE_NS + 1;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "release_delay too long")]
+    fn rejects_release_delay_over_24h() {
+        let mut p = params();
+        p.release_delay_ns = MAX_RELEASE_DELAY_NS + 1;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "outlayer fee too high")]
+    fn rejects_outlayer_fee_over_1_near() {
+        let mut p = params();
+        p.outlayer_call.fee = U128(MAX_OUTLAYER_FEE_YOCTO + 1);
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "new_buyer_cap must be > 0")]
+    fn rejects_zero_new_buyer_cap() {
+        let mut p = params();
+        p.new_buyer_cap = U128(0);
+        init_params(p);
+    }
+
+    #[test]
+    fn accepts_production_values() {
+        // SPEC §7 prod column: T_retry 24 h, T_outage_max 72 h, 3 attempts, release delay 1 h.
+        let mut p = params();
+        p.t_pay_ns = NS_PER_HOUR / 2;
+        p.t_grace_ns = NS_PER_HOUR / 4;
+        p.t_retry_ns = 24 * NS_PER_HOUR;
+        p.t_outage_max_ns = 72 * NS_PER_HOUR;
+        p.min_failed_attempts = 3;
+        p.release_delay_ns = NS_PER_HOUR;
         init_params(p);
     }
 

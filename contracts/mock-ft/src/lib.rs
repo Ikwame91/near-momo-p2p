@@ -14,6 +14,11 @@ use near_contract_standards::storage_management::{
 use near_sdk::json_types::U128;
 use near_sdk::{env, near, require, AccountId, NearToken, PanicOnDefault, PromiseOrValue};
 
+/// Largest single mint: 1,000 mUSDC (6 decimals). Without a cap anyone could mint close to
+/// u128::MAX, after which every mint ("Total supply overflow") or every transfer into the receiver
+/// ("Balance overflow") fails, freezing the demo. With the cap, an overflow needs ~3e29 mints.
+pub const MAX_MINT: u128 = 1_000 * 1_000_000;
+
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct MockFt {
@@ -32,6 +37,7 @@ impl MockFt {
     /// otherwise anyone could drain this contract's NEAR by minting to many new accounts.
     #[payable]
     pub fn mint(&mut self, account_id: AccountId, amount: U128) {
+        require!(amount.0 <= MAX_MINT, "mint at most 1000 mUSDC per call");
         if !self.token.accounts.contains_key(&account_id) {
             let min = self.token.storage_balance_bounds().min;
             require!(
@@ -43,7 +49,7 @@ impl MockFt {
         self.token.internal_deposit(&account_id, amount.0);
         near_contract_standards::fungible_token::events::FtMint {
             owner_id: &account_id,
-            amount: amount,
+            amount,
             memo: Some("mock mint"),
         }
         .emit();
@@ -175,6 +181,28 @@ mod tests {
         testing_env!(ctx.attached_deposit(NearToken::from_yoctonear(0)).build());
         ft.mint(accounts(0), U128(2));
         assert_eq!(ft.ft_balance_of(accounts(0)).0, 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "mint at most 1000 mUSDC per call")]
+    fn mint_above_cap_fails() {
+        let mut ctx = VMContextBuilder::new();
+        testing_env!(ctx.predecessor_account_id(accounts(0)).build());
+        let mut ft = MockFt::new();
+        let min = storage_min(&ft);
+        testing_env!(ctx.attached_deposit(min).build());
+        ft.mint(accounts(0), U128(MAX_MINT + 1));
+    }
+
+    #[test]
+    fn mint_at_cap_succeeds() {
+        let mut ctx = VMContextBuilder::new();
+        testing_env!(ctx.predecessor_account_id(accounts(0)).build());
+        let mut ft = MockFt::new();
+        let min = storage_min(&ft);
+        testing_env!(ctx.attached_deposit(min).build());
+        ft.mint(accounts(0), U128(MAX_MINT));
+        assert_eq!(ft.ft_balance_of(accounts(0)).0, MAX_MINT);
     }
 
     #[test]

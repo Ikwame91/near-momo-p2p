@@ -9,6 +9,59 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: PR #7 fix-up after 3-reviewer review (D-016)
+Done:
+- `update_quote` requires 1 yocto (T34). `on_withdraw` checks predecessor in its body.
+- Withdraw gas: `ft_transfer` 20 TGas min + all unused gas (weight 1); `on_withdraw` 15 TGas,
+  weight 0. Test asserts the created receipts (receiver, args, deposit, gas, weight).
+- `Lp.key_fp: Option<String>`; registration charges +68 bytes for it.
+- `new`: `min_failed_attempts` 2–10, OutLayer gas ≤ 250, `new_buyer_cap` > 0, ceilings on timing
+  and fee. Existing test `rejects_zero_failed_attempts` kept; its expected message changed
+  because the rule deliberately changed (≥1 → 2–10). `rejects_total_gas_over_limit` now uses
+  250+31 so it still tests the sum, not the new 250 cap. Two update_quote tests now attach 1 yocto.
+- 30 new tests: receipts for withdrawals, Bond-pot callback, ft_on_transfer returns 0, stranger
+  callback, bond locked with an open order, 1-yocto edges (0, 2), zero withdraw, name/profile
+  lengths, credit overflow, exact storage cost (no refund), cost − 1 yocto fails, refund on overpay.
+- mock-ft: 1,000 mUSDC per-mint cap (+2 tests); clippy nit fixed. clippy installed for 1.97.0.
+```
+$ cd contracts && cargo test
+     Running unittests src/lib.rs (target/debug/deps/openramp_escrow-d81469ffa25a38a7)
+test result: ok. 80 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.90s
+     Running unittests src/lib.rs (target/debug/deps/openramp_mock_ft-f436da86f5147f23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s
+$ cargo clippy --all-targets   (no warnings printed)
+$ cd escrow && cargo near build non-reproducible-wasm   → Finished cargo near build in 15s
+```
+Failed / blocked: first runs failed as expected after the rule changes (3 tests), then a type
+mismatch (mock GasWeight) and a test-setup issue (mocked storage persists within a test, so the
+storage-cost probe uses a same-length second LP account). All fixed; no test weakened.
+Next: docs PR with the design decisions Kwame agreed (pending = outage up to the hard limit,
+one provider per LP, checkout through the escrow, undefined rules, Q5 proposal, 403 = outage),
+must-have / nice-to-have plan list, AGENTS.md diff for approval. Then M1.3.
+
+## 2026-11-03 — Session 3: M1.2 DONE (LP registration, deposits, withdrawals)
+Branch: `escrow/lp-bonds-and-deposits` (from main).
+Done: `contracts/escrow/src/lp.rs` + `lp_tests.rs`:
+- `register_lp(provider, secret_ref, quote)`: caller pays the storage of its record (refund of the
+  excess), rejects double registration, bad quotes (rate 0, min 0, min > max), bad names, and a
+  `secret_ref` that is not the LP's own (new T33, found in self-review).
+- `update_quote` (new orders only). `get_lp` view.
+- `ft_on_transfer(sender, amount, msg)`: only the configured token (inv. 9, T26); msg "bond" or
+  "liquidity"; amount > 0; sender must be a registered LP. Every rejection panics so NEP-141
+  refunds the full amount.
+- `withdraw_liquidity` / `withdraw_bond`: exactly 1 yoctoNEAR, only available balance, bond only
+  with zero open orders (inv. 4; exercised with real orders in M1.3). Debit first, `ft_transfer`,
+  then `on_withdraw` (#[private]) re-credits if the transfer failed.
+```
+cargo test (contracts/): escrow 51 passed (28 config + 23 LP); mock-ft 3 passed; 0 failed, 0 warnings
+cargo near build non-reproducible-wasm (escrow): OK (local only, not reproducible; D-015)
+```
+Failed / blocked: none. First run had 4 must-use warnings (detached refund promise, test helpers);
+fixed with `.detach()` (near-sdk 5.30 `Promise::detach`).
+Next: M1.3 bond/secret lock while orders open, bond rule, `pause_lp`.
 ## 2026-11-03 — Session 3: M0.6b Test B2 DONE (pawaPay sandbox payouts)
 Branch: `test-b2/pawapay-sandbox-payouts` (from main after PR #5).
 Setup check: Kwame's sandbox token works through the proxy (network secret; no env var).

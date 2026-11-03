@@ -37,7 +37,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 
 ## M1 Escrow core (Nov 3–6): contract logic with unit tests, no OutLayer yet
 - [x] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
-- [ ] M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals. Check: tests.
+- [x] M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals. Check: tests.
 - [ ] M1.3 Bond/secret lock while orders open (inv. 4), bond rule (inv. 5), `pause_lp` (inv. 14). Check: failing→passing tests.
 - [ ] M1.4 Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), new-buyer cap + per-LP
       exposure cap (inv. 14). Check: tests.
@@ -48,8 +48,11 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
       inv. 11, D-012). Check: tests with time travel.
 - [ ] M1.7 Balance accounting invariant (inv. 6) checked after every test. Check: tests.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
-      tokens (inv. 9, T26). Check: tests.
-- [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Check: passes.
+      tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
+- [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Also
+      prove what unit tests cannot: `#[private]` callbacks reject strangers, double init rejected,
+      NEP-141 refund on a rejected deposit, failed withdrawal (receiver unregistered) is re-credited,
+      and record real gas burnt for ft_transfer / on_withdraw (D-016). Check: passes.
 
 ## M2 Verifier + real wiring (Nov 6–8)
 - [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
