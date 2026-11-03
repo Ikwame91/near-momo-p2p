@@ -142,3 +142,14 @@ order (T20).
 Alternatives: no slash during outages, refund the buyer instead (rejected: nothing to refund in
 the buy flow, and it would excuse an LP that deletes its secret); one window for all failures
 (rejected: harsher on honest LPs for no gain).
+
+## D-013 near-contract-standards for the mock USDC token (Nov 3, 2026)
+Status: accepted
+Context: Escrow tests (unit now, sandbox in M1.8) need a NEP-141 token that behaves like USDC
+(6 decimals, `ft_transfer_call` → `ft_on_transfer`, storage registration).
+Decision: `contracts/mock-ft` uses `near-contract-standards` 5.30 (same repo and version as
+near-sdk, https://github.com/near/near-sdk-rs), with an open `mint` for tests. TEST ONLY: never
+deployed outside testnet/sandbox; the escrow's token is fixed at init (inv. 9), and on mainnet it
+is native USDC.
+Alternatives: hand-written NEP-141 (more code to get wrong); using real testnet USDC (not
+mintable for tests).

@@ -1,0 +1,16 @@
+[package]
+name = "openramp-mock-ft"
+version = "0.1.0"
+edition = "2021"
+description = "TEST ONLY mock USDC (NEP-141, 6 decimals) with open minting. Never deploy outside testnet/sandbox."
+repository = "https://github.com/Ikwame91/near-momo-p2p"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+near-contract-standards = { workspace = true }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

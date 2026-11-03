@@ -1,0 +1,15 @@
+[package]
+name = "openramp-escrow"
+version = "0.1.0"
+edition = "2021"
+description = "OpenRamp escrow: holds USDC, LP bonds and orders; releases only on an OutLayer PAID verdict"
+repository = "https://github.com/Ikwame91/near-momo-p2p"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

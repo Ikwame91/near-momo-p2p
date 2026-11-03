@@ -9,6 +9,28 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: M1.1 DONE (escrow scaffold + mock USDC)
+Branch: `escrow/scaffold-and-mock-usdc` (from main after PR #4).
+Done: `contracts/` cargo workspace (shared release profile).
+- `contracts/escrow`: `new(owner, token, outlayer, verifier, params)` stores the deploy-time config
+  with no setters (inv. 9); `deploy_tag` = first 8 hex of sha256(contract_id ":" block_height)
+  (inv. 12, T27); validates verifier (https URL + 64-hex sha256, or project+version) and params
+  (t_outage_max >= t_retry, min_failed_attempts >= 1, outlayer_fee > 0); `get_config` view.
+- `contracts/mock-ft`: TEST ONLY NEP-141 mUSDC, 6 decimals, open `mint` (D-013).
+```
+cargo test (contracts/):
+  escrow: 6 passed (init_stores_fixed_config, deploy_tag_is_8_hex_and_differs_per_deployment,
+          rejects_bad_verifier_hash, rejects_http_verifier_url,
+          rejects_outage_window_shorter_than_retry, rejects_zero_failed_attempts)
+  mock-ft: 1 passed (mint_and_transfer)
+cargo near build non-reproducible-wasm:
+  openramp_escrow.wasm  115750 B  sha256 a9de3590726ccb5f18be1bdfc5aa1f5c0e79699cab1cc1a245f4f38327782f26
+  openramp_mock_ft.wasm 146163 B  sha256 253a471face17da507740f049d45cbbc246235fc462c01f76ee5d26ea42330e6
+```
+Failed / blocked: none.
+Next: M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals.
+Gotchas: commits no longer carry the Claude co-author / session trailers (Kwame, Nov 3).
+
 ## 2026-11-02 — Session 2: pawaPay decision + slash timing (docs only)
 Branch: `docs/pawapay-decision-and-slash-rule` (from main after PR #3).
 Done: D-011 (pawaPay sandbox for sell payouts, demo only; production = licensed LPs; Korapay

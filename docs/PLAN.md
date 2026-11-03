@@ -36,7 +36,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M0.9 Go/no-go: write results in PROGRESS.md, decide SPEC Q4 in DECISIONS.md, update SPEC.
 
 ## M1 Escrow core (Nov 3–6): contract logic with unit tests, no OutLayer yet
-- [ ] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
+- [x] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
 - [ ] M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals. Check: tests.
 - [ ] M1.3 Bond/secret lock while orders open (inv. 4), bond rule (inv. 5), `pause_lp` (inv. 14). Check: failing→passing tests.
 - [ ] M1.4 Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), new-buyer cap + per-LP
