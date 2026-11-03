@@ -26,9 +26,11 @@ the LP's API key (the key never leaves the TEE).
 | Escrow contract | NEAR contract `contracts/escrow` | Holds USDC and bonds, runs the order state machine |
 | Settlement | NEAR Intents 1Click API | Moves released USDC to another chain if the user wants |
 
-No admin or arbiter can move funds. The contract owner can only set timing and cap parameters
-**before** orders exist that depend on them; see §7. The verifier program, the accepted token and the
-OutLayer contract are fixed at deploy and can never be changed (invariant 9).
+No admin, arbiter or owner exists (D-014). Every setting (token, OutLayer contract, verifier,
+timing, caps and OutLayer call limits) is fixed when the contract is initialised and can never be
+changed by anyone, including the deployer (invariant 9). Different settings mean deploying a new
+instance, which gets its own `deploy_tag`. Only the contract's own account can initialise it,
+in the same transaction as the deploy (invariant 9, T32).
 
 ## 3. LP lifecycle
 1. `register_lp(provider, secret_ref, rate_ghs_per_usdc, min, max, new_buyer_exposure_max)`:
@@ -59,7 +61,8 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
    `usdc_amount` of LP liquidity, and computes `ghs_amount` from the LP rate. It issues `order_id`
    and the **payment reference** `opr-<deploy_tag>-<order_id>` (derived only by the contract, so it
    is bound to this order; `deploy_tag` = first 8 hex chars of
-   `sha256(contract_id ‖ init_block_height)`, so references never repeat across deployments).
+   `sha256(contract_id ":" init_block_height)` with the height in decimal, e.g.
+   `sha256("escrow.testnet:100")`, so references never repeat across deployments).
    State `AWAITING_PAYMENT`, `pay_deadline = now + T_pay`.
 2. Buyer pays `ghs_amount` through a Paystack checkout with that reference. The checkout is created
    by the verifier in `checkout` mode, inside the TEE, with **the same LP key** that later verifies
@@ -171,12 +174,15 @@ flight per order. A callback for a request that is not the order's current one i
 | `new_buyer_cap` | max USDC for an account's first N orders | 50 | 50 |
 | `release_delay` | delay before release for new buyers (reversal protection) | 1 h | 0 |
 | `min_failed_attempts` | failed verifications needed (spread over the window) before a slash | 3 | 2 |
-| `outlayer_fee`, limits | deposit, gas and resource limits the contract uses for each verification | from `estimate_execution_cost` | same |
+| `outlayer_call` | per verification: `fee` (yoctoNEAR deposit), `gas_tgas` (100–250), `callback_gas_tgas` (≥ 10; gas + callback ≤ 280), `max_instructions` (≤ 500e9), `max_memory_mb` (≤ 4096), `max_execution_seconds` (≤ 180) | fee from `estimate_execution_cost` | fee 0.01 NEAR, 200 + 30 TGas, 1e9 instr, 128 MB, 20 s |
 | `new_buyer_exposure_max` | per LP, set by the LP: total open USDC with new buyers | LP's choice | LP's choice |
 
-Fixed at deploy, no setter exists (invariant 9): `token` (accepted USDC contract; native USDC on
-mainnet, mock USDC on testnet), `verifier` (wasm URL + sha256 or OutLayer project + version),
-`outlayer` contract id, `deploy_tag`.
+Everything above and below is fixed at deploy; no setter exists (invariant 9, D-014): `token`
+(accepted USDC contract; native USDC on mainnet, mock USDC on testnet), `verifier` (wasm URL +
+sha256 or OutLayer project + version), `outlayer` contract id, `deploy_tag`, and all parameters
+in the table. `new` rejects: token = outlayer, either = the contract itself, a non-https verifier
+URL, a hash that is not 64 lowercase hex chars, zero `t_pay` / `t_retry` / fee, `t_outage_max <
+t_retry`, `min_failed_attempts = 0`, OutLayer limits outside the ranges above.
 
 ## 8. Invariants (each one gets a test)
 1. USDC is released only on a PAID verdict from the OutLayer callback for this order's current
@@ -188,8 +194,9 @@ mainnet, mock USDC on testnet), `verifier` (wasm URL + sha256 or OutLayer projec
 5. `open_buy_notional ≤ bond` for every LP at all times.
 6. Contract USDC balance ≥ sum of all bonds + liquidity + locked sell funds + pending releases.
 7. No phone number or API key is stored on-chain or written to logs.
-8. No account (including the owner) can move user funds outside the state machine.
-9. The verifier source, accepted token and OutLayer contract are fixed at init and have no setter.
+8. No account (including the deployer) can move user funds outside the state machine.
+9. The verifier source, accepted token, OutLayer contract and all parameters are fixed at init and
+   have no setter; there is no owner role. Only the contract's own account can call `new`.
    `ft_on_transfer` accepts only the configured token. The deployed contract has no full-access key
    (or the README states plainly who can upgrade it).
 10. A verdict counts only if it carries this order's reference and the LP's registered `key_fp`;

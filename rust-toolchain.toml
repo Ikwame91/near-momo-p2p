@@ -1,0 +1,6 @@
+# Pinned so every build (local, CI, judges, cargo-near reproducible image) uses the same Rust.
+# near-sdk 5.30 needs Rust >= 1.95. Matches the reproducible-build image
+# sourcescan/cargo-near:0.22.0-rust-1.97.0 in contracts/*/Cargo.toml.
+[toolchain]
+channel = "1.97.0"
+targets = ["wasm32-unknown-unknown", "wasm32-wasip2"]

@@ -12,7 +12,7 @@ use near_contract_standards::storage_management::{
     StorageBalance, StorageBalanceBounds, StorageManagement,
 };
 use near_sdk::json_types::U128;
-use near_sdk::{near, AccountId, NearToken, PanicOnDefault, PromiseOrValue};
+use near_sdk::{env, near, require, AccountId, NearToken, PanicOnDefault, PromiseOrValue};
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
@@ -27,9 +27,17 @@ impl MockFt {
         Self { token: FungibleToken::new(b"t".to_vec()) }
     }
 
-    /// Open mint (test only): registers `account_id` if needed and credits `amount`.
+    /// Open mint (test only): credits `amount` to `account_id`. Registering a NEW account costs
+    /// storage, so the caller must attach at least `storage_balance_bounds().min` for it;
+    /// otherwise anyone could drain this contract's NEAR by minting to many new accounts.
+    #[payable]
     pub fn mint(&mut self, account_id: AccountId, amount: U128) {
         if !self.token.accounts.contains_key(&account_id) {
+            let min = self.token.storage_balance_bounds().min;
+            require!(
+                env::attached_deposit() >= min,
+                "attach the storage deposit (storage_balance_bounds.min) to mint to a new account"
+            );
             self.token.internal_register_account(&account_id);
         }
         self.token.internal_deposit(&account_id, amount.0);
@@ -78,7 +86,17 @@ impl FungibleTokenResolver for MockFt {
         receiver_id: AccountId,
         amount: U128,
     ) -> U128 {
-        let (used, _burned) = self.token.internal_ft_resolve_transfer(&sender_id, receiver_id, amount);
+        let sender = sender_id.clone();
+        let (used, burned) = self.token.internal_ft_resolve_transfer(&sender_id, receiver_id, amount);
+        if burned > 0 {
+            // Sender unregistered during the transfer: the refund is burned (NEP-141 events).
+            near_contract_standards::fungible_token::events::FtBurn {
+                owner_id: &sender,
+                amount: U128(burned),
+                memo: Some("refund burned: sender unregistered"),
+            }
+            .emit();
+        }
         used.into()
     }
 }
@@ -134,11 +152,38 @@ mod tests {
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::testing_env;
 
+    fn storage_min(ft: &MockFt) -> NearToken {
+        ft.storage_balance_bounds().min
+    }
+
+    #[test]
+    #[should_panic(expected = "attach the storage deposit")]
+    fn mint_to_new_account_without_storage_deposit_fails() {
+        testing_env!(VMContextBuilder::new().predecessor_account_id(accounts(0)).build());
+        let mut ft = MockFt::new();
+        ft.mint(accounts(0), U128(1));
+    }
+
+    #[test]
+    fn mint_to_existing_account_needs_no_deposit() {
+        let mut ctx = VMContextBuilder::new();
+        testing_env!(ctx.predecessor_account_id(accounts(0)).build());
+        let mut ft = MockFt::new();
+        let min = storage_min(&ft);
+        testing_env!(ctx.attached_deposit(min).build());
+        ft.mint(accounts(0), U128(1));
+        testing_env!(ctx.attached_deposit(NearToken::from_yoctonear(0)).build());
+        ft.mint(accounts(0), U128(2));
+        assert_eq!(ft.ft_balance_of(accounts(0)).0, 3);
+    }
+
     #[test]
     fn mint_and_transfer() {
         let mut ctx = VMContextBuilder::new();
         testing_env!(ctx.predecessor_account_id(accounts(0)).build());
         let mut ft = MockFt::new();
+        let min = storage_min(&ft);
+        testing_env!(ctx.attached_deposit(min).build());
         ft.mint(accounts(0), U128(1_000_000));
         ft.mint(accounts(1), U128(0));
         assert_eq!(ft.ft_metadata().decimals, 6);

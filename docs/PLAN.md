@@ -62,7 +62,9 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
 - [ ] M2.6 Reproducible verifier build (rust-toolchain.toml; OutLayer GitHub compile if possible,
       SPEC Q7). Check: a second build gives the same sha256.
-- [ ] M2.7 Remove the escrow's full-access key before the demo, or document upgrade trust (inv. 9).
+- [ ] M2.7 Deploy the escrow from a reproducible build, with deploy + `new` in ONE batched transaction
+      signed by the contract account (T32); then remove its full-access key, or document upgrade
+      trust (inv. 9).
 - [ ] M2.5 Hostile review (PROMPTS.md §8) of contract + verifier; fix findings with tests.
 
 ## M3 Sell flow + settlement (Nov 8–10)
