@@ -30,7 +30,7 @@ pub(crate) const MAX_PROFILE_LEN: usize = 64;
 /// The only providers (D-017): "paystack" = buy-side LP (collects cedis), "pawapay" = sell-side
 /// LP (pays cedis out).
 pub const PROVIDERS: [&str; 2] = ["paystack", "pawapay"];
-#[cfg_attr(not(test), allow(dead_code))] // used by lock_for_buy
+#[cfg_attr(not(test), expect(dead_code))] // used by lock_for_buy
 pub(crate) const PROVIDER_BUY: &str = "paystack";
 
 /// Names the OutLayer secret that holds the LP's provider key (never the key itself, inv. 7).
@@ -71,7 +71,9 @@ pub struct Lp {
     pub key_fp: Option<String>,
 }
 
+/// Serialized as "bond" / "liquidity" (same words as the deposit `msg`), in events and callbacks.
 #[near(serializers = [json])]
+#[serde(rename_all = "snake_case")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Pot {
     Bond,
@@ -79,12 +81,16 @@ pub enum Pot {
 }
 
 fn validate_profile(secret_ref: &SecretRef, lp_id: &AccountId) {
+    // ASCII letters, digits, '-' and '_' only: keeps free text (e.g. a phone number) out of public
+    // state, and one byte per character so the storage reservation stays exact.
     require!(
-        !secret_ref.profile.is_empty() && secret_ref.profile.len() <= MAX_PROFILE_LEN,
-        "secret profile must be 1-64 chars"
+        !secret_ref.profile.is_empty()
+            && secret_ref.profile.len() <= MAX_PROFILE_LEN
+            && secret_ref.profile.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+        "secret profile must be 1-64 chars of A-Z a-z 0-9 - _"
     );
     // An LP may only point at its own OutLayer secret, never another LP's key (T33).
-    require!(&secret_ref.account_id == lp_id, "secret_ref must belong to the registering LP");
+    require!(&secret_ref.account_id == lp_id, "secret_ref must belong to the caller");
 }
 
 fn validate_quote(q: &Quote) {
@@ -96,7 +102,7 @@ fn validate_quote(q: &Quote) {
 #[near]
 impl Escrow {
     /// Register the caller as an LP. Attach NEAR for the storage this record uses (T18); any
-    /// excess is refunded. `provider` is a plug-in name, e.g. "paystack".
+    /// excess is refunded. `provider` is exactly "paystack" (buy side) or "pawapay" (sell side).
     #[payable]
     pub fn register_lp(&mut self, provider: String, secret_ref: SecretRef, quote: Quote) {
         let lp_id = env::predecessor_account_id();
@@ -261,7 +267,7 @@ impl Escrow {
     /// LP registered, provider "paystack", not paused (inv. 14), `key_fp` set (SPEC §3.1), enough
     /// liquidity, and the bond rule `locked + amount <= bond` (inv. 5), so a slash can always be
     /// paid in full from the bond.
-    #[cfg_attr(not(test), allow(dead_code))] // called by buy orders from M1.4
+    #[cfg_attr(not(test), expect(dead_code))] // called by buy orders from M1.4
     pub(crate) fn lock_for_buy(&mut self, lp_id: &AccountId, amount: u128) {
         require!(amount > 0, "amount must be > 0");
         let lp = self.lps.get_mut(lp_id).unwrap_or_else(|| env::panic_str("not a registered LP"));
@@ -278,10 +284,14 @@ impl Escrow {
 
     /// Close an order's lock (used by M1.4+): the locked USDC either goes back to the LP's
     /// liquidity (expired, slashed) or leaves the LP (released to the buyer).
-    #[cfg_attr(not(test), allow(dead_code))] // called by buy orders from M1.4
+    /// M1.4 MUST call this exactly once per order, with the amount stored on that order, and a
+    /// slash MUST debit the bond in the same step (PLAN M1.4/M1.6).
+    #[cfg_attr(not(test), expect(dead_code))] // called by buy orders from M1.4
     pub(crate) fn unlock(&mut self, lp_id: &AccountId, amount: u128, back_to_liquidity: bool) {
+        require!(amount > 0, "amount must be > 0");
         let lp = self.lps.get_mut(lp_id).unwrap_or_else(|| env::panic_str("not a registered LP"));
-        require!(lp.locked.0 >= amount && lp.open_orders > 0, "nothing locked");
+        require!(lp.open_orders > 0, "no open orders");
+        require!(lp.locked.0 >= amount, "unlock exceeds locked");
         lp.locked.0 -= amount;
         lp.open_orders -= 1;
         if back_to_liquidity {

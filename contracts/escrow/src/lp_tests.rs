@@ -110,7 +110,7 @@ fn register_with_empty_secret_profile_fails() {
 }
 
 #[test]
-#[should_panic(expected = "secret_ref must belong to the registering LP")]
+#[should_panic(expected = "secret_ref must belong to the caller")]
 fn register_with_someone_elses_secret_fails() {
     let mut e = deployed();
     as_(LP, NearToken::from_millinear(100));
@@ -319,7 +319,7 @@ fn withdraw_creates_exact_transfer_and_callback() {
     let (to, _, args, dep, gas, weight) = cb[0];
     assert_eq!(to, ME);
     assert_eq!(args["lp_id"], LP);
-    assert_eq!(args["pot"], "Liquidity");
+    assert_eq!(args["pot"], "liquidity");
     assert_eq!(args["amount"], (5 * USDC).to_string());
     assert_eq!(*dep, yocto(0));
     assert_eq!(*gas, WITHDRAW_CALLBACK_GAS);
@@ -333,7 +333,7 @@ fn withdraw_bond_callback_names_bond_pot() {
     as_(LP, yocto(1));
     let _ = e.withdraw_bond(U128(USDC));
     let cb: Vec<_> = calls().into_iter().filter(|x| x.1 == "on_withdraw").collect();
-    assert_eq!(cb[0].2["pot"], "Bond");
+    assert_eq!(cb[0].2["pot"], "bond");
 }
 
 #[test]
