@@ -6,7 +6,7 @@
 //! refunds the full amount to the sender (fail closed). Withdrawals debit first and re-credit in
 //! a callback if the token transfer fails, so the books never show money that left.
 
-use crate::{Escrow, EscrowExt};
+use crate::{Escrow, EscrowExt, Event};
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use near_sdk::{
@@ -24,6 +24,14 @@ pub(crate) const WITHDRAW_CALLBACK_GAS: Gas = Gas::from_tgas(15);
 /// `key_fp` is written later by the fingerprint callback (M1.5/M2), but its storage is charged at
 /// registration: borsh `Some(String)` of 64 hex chars = 1 + 4 + 64 bytes more than `None`.
 pub(crate) const KEY_FP_EXTRA_BYTES: u64 = 68;
+/// Longest secret profile name. Registration pays for this length whatever the current name, so
+/// a later `set_secret_ref` can never grow storage the LP has not paid for.
+pub(crate) const MAX_PROFILE_LEN: usize = 64;
+/// The only providers (D-017): "paystack" = buy-side LP (collects cedis), "pawapay" = sell-side
+/// LP (pays cedis out).
+pub const PROVIDERS: [&str; 2] = ["paystack", "pawapay"];
+#[cfg_attr(not(test), expect(dead_code))] // used by lock_for_buy
+pub(crate) const PROVIDER_BUY: &str = "paystack";
 
 /// Names the OutLayer secret that holds the LP's provider key (never the key itself, inv. 7).
 #[near(serializers = [json, borsh])]
@@ -63,11 +71,26 @@ pub struct Lp {
     pub key_fp: Option<String>,
 }
 
+/// Serialized as "bond" / "liquidity" (same words as the deposit `msg`), in events and callbacks.
 #[near(serializers = [json])]
+#[serde(rename_all = "snake_case")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Pot {
     Bond,
     Liquidity,
+}
+
+fn validate_profile(secret_ref: &SecretRef, lp_id: &AccountId) {
+    // ASCII letters, digits, '-' and '_' only: keeps free text (e.g. a phone number) out of public
+    // state, and one byte per character so the storage reservation stays exact.
+    require!(
+        !secret_ref.profile.is_empty()
+            && secret_ref.profile.len() <= MAX_PROFILE_LEN
+            && secret_ref.profile.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+        "secret profile must be 1-64 chars of A-Z a-z 0-9 - _"
+    );
+    // An LP may only point at its own OutLayer secret, never another LP's key (T33).
+    require!(&secret_ref.account_id == lp_id, "secret_ref must belong to the caller");
 }
 
 fn validate_quote(q: &Quote) {
@@ -79,22 +102,21 @@ fn validate_quote(q: &Quote) {
 #[near]
 impl Escrow {
     /// Register the caller as an LP. Attach NEAR for the storage this record uses (T18); any
-    /// excess is refunded. `provider` is a plug-in name, e.g. "paystack".
+    /// excess is refunded. `provider` is exactly "paystack" (buy side) or "pawapay" (sell side).
     #[payable]
     pub fn register_lp(&mut self, provider: String, secret_ref: SecretRef, quote: Quote) {
         let lp_id = env::predecessor_account_id();
         require!(self.lps.get(&lp_id).is_none(), "already registered");
-        require!(!provider.is_empty() && provider.len() <= 32, "provider name must be 1-32 chars");
-        require!(!secret_ref.profile.is_empty() && secret_ref.profile.len() <= 64, "secret profile must be 1-64 chars");
-        // An LP may only point at its own OutLayer secret, never another LP's key.
-        require!(secret_ref.account_id == lp_id, "secret_ref must belong to the registering LP");
+        require!(PROVIDERS.contains(&provider.as_str()), "provider must be \"paystack\" or \"pawapay\"");
+        validate_profile(&secret_ref, &lp_id);
         validate_quote(&quote);
+        let profile_room = (MAX_PROFILE_LEN - secret_ref.profile.len()) as u64;
         let before = env::storage_usage();
         let zero = U128(0);
         self.lps.insert(
             lp_id.clone(),
             Lp {
-                provider,
+                provider: provider.clone(),
                 secret_ref,
                 quote,
                 bond: zero,
@@ -106,14 +128,15 @@ impl Escrow {
             },
         );
         self.lps.flush();
-        let bytes = env::storage_usage() - before + KEY_FP_EXTRA_BYTES;
+        let bytes = env::storage_usage() - before + KEY_FP_EXTRA_BYTES + profile_room;
         let cost = env::storage_byte_cost().saturating_mul(bytes as u128);
         let attached = env::attached_deposit();
         require!(attached >= cost, format!("attach at least {} yoctoNEAR for storage", cost.as_yoctonear()));
         let refund = attached.saturating_sub(cost);
         if !refund.is_zero() {
-            Promise::new(lp_id).transfer(refund).detach();
+            Promise::new(lp_id.clone()).transfer(refund).detach();
         }
+        Event::LpRegistered { lp: lp_id, provider }.emit();
     }
 
     /// Change the quote; applies to new orders only. Requires exactly 1 yoctoNEAR: a leaked
@@ -124,9 +147,44 @@ impl Escrow {
         validate_quote(&quote);
         let id = env::predecessor_account_id();
         match self.lps.get_mut(&id) {
-            Some(lp) => lp.quote = quote,
+            Some(lp) => lp.quote = quote.clone(),
             None => env::panic_str("not a registered LP"),
         }
+        Event::QuoteUpdated {
+            lp: id,
+            rate_pesewas_per_usdc: quote.rate_pesewas_per_usdc,
+            min_usdc: quote.min_usdc,
+            max_usdc: quote.max_usdc,
+            new_buyer_exposure_max: quote.new_buyer_exposure_max,
+        }
+        .emit();
+    }
+
+    /// Point at a different OutLayer secret (SPEC §3.6): only with zero open orders (inv. 4), and
+    /// it clears `key_fp`, so the LP takes no orders until the new key is fingerprinted.
+    /// Storage cannot grow: registration paid for the longest profile name.
+    #[payable]
+    pub fn set_secret_ref(&mut self, secret_ref: SecretRef) {
+        assert_one_yocto();
+        let id = env::predecessor_account_id();
+        validate_profile(&secret_ref, &id);
+        let lp = self.lps.get_mut(&id).unwrap_or_else(|| env::panic_str("not a registered LP"));
+        require!(lp.open_orders == 0, "secret is locked while orders are open");
+        lp.secret_ref = secret_ref;
+        lp.key_fp = None;
+        Event::SecretRefChanged { lp: id }.emit();
+    }
+
+    /// Stop new orders (open orders run to the end), so an LP can always reach zero open orders
+    /// (T28). Requires 1 yoctoNEAR (T34).
+    #[payable]
+    pub fn pause_lp(&mut self) {
+        self.set_paused(true);
+    }
+
+    #[payable]
+    pub fn resume_lp(&mut self) {
+        self.set_paused(false);
     }
 
     /// NEP-141 receiver. Only the configured token may call it (inv. 9, T26).
@@ -140,7 +198,8 @@ impl Escrow {
         };
         let mut lp = self.lp_or_panic(&sender_id);
         Self::credit(&mut lp, pot, amount.0);
-        self.lps.insert(sender_id, lp);
+        self.lps.insert(sender_id.clone(), lp);
+        Event::Deposit { lp: sender_id, pot, amount }.emit();
         PromiseOrValue::Value(U128(0)) // keep all of it
     }
 
@@ -178,7 +237,8 @@ impl Escrow {
         }
         let mut lp = self.lp_or_panic(&lp_id);
         Self::credit(&mut lp, pot, amount.0);
-        self.lps.insert(lp_id, lp);
+        self.lps.insert(lp_id.clone(), lp);
+        Event::WithdrawRecredited { lp: lp_id, pot, amount }.emit();
         false
     }
 
@@ -188,6 +248,57 @@ impl Escrow {
 }
 
 impl Escrow {
+    fn set_paused(&mut self, paused: bool) {
+        assert_one_yocto();
+        let id = env::predecessor_account_id();
+        let lp = self.lps.get_mut(&id).unwrap_or_else(|| env::panic_str("not a registered LP"));
+        if lp.paused == paused {
+            return; // no change, no event
+        }
+        lp.paused = paused;
+        if paused {
+            Event::LpPaused { lp: id }.emit();
+        } else {
+            Event::LpResumed { lp: id }.emit();
+        }
+    }
+
+    /// Lock `amount` of a buy-side LP's liquidity for a new buy order (used by M1.4). Enforces:
+    /// LP registered, provider "paystack", not paused (inv. 14), `key_fp` set (SPEC §3.1), enough
+    /// liquidity, and the bond rule `locked + amount <= bond` (inv. 5), so a slash can always be
+    /// paid in full from the bond.
+    #[cfg_attr(not(test), expect(dead_code))] // called by buy orders from M1.4
+    pub(crate) fn lock_for_buy(&mut self, lp_id: &AccountId, amount: u128) {
+        require!(amount > 0, "amount must be > 0");
+        let lp = self.lps.get_mut(lp_id).unwrap_or_else(|| env::panic_str("not a registered LP"));
+        require!(lp.provider == PROVIDER_BUY, "LP does not serve buy orders");
+        require!(!lp.paused, "LP is paused");
+        require!(lp.key_fp.is_some(), "LP key not fingerprinted yet");
+        require!(lp.liquidity.0 >= amount, "not enough LP liquidity");
+        let locked = lp.locked.0.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow"));
+        require!(locked <= lp.bond.0, "bond does not cover this order");
+        lp.liquidity.0 -= amount;
+        lp.locked.0 = locked;
+        lp.open_orders = lp.open_orders.checked_add(1).unwrap_or_else(|| env::panic_str("overflow"));
+    }
+
+    /// Close an order's lock (used by M1.4+): the locked USDC either goes back to the LP's
+    /// liquidity (expired, slashed) or leaves the LP (released to the buyer).
+    /// M1.4 MUST call this exactly once per order, with the amount stored on that order, and a
+    /// slash MUST debit the bond in the same step (PLAN M1.4/M1.6).
+    #[cfg_attr(not(test), expect(dead_code))] // called by buy orders from M1.4
+    pub(crate) fn unlock(&mut self, lp_id: &AccountId, amount: u128, back_to_liquidity: bool) {
+        require!(amount > 0, "amount must be > 0");
+        let lp = self.lps.get_mut(lp_id).unwrap_or_else(|| env::panic_str("not a registered LP"));
+        require!(lp.open_orders > 0, "no open orders");
+        require!(lp.locked.0 >= amount, "unlock exceeds locked");
+        lp.locked.0 -= amount;
+        lp.open_orders -= 1;
+        if back_to_liquidity {
+            lp.liquidity.0 = lp.liquidity.0.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow"));
+        }
+    }
+
     fn lp_or_panic(&self, id: &AccountId) -> Lp {
         match self.lps.get(id) {
             Some(lp) => lp.clone(),
@@ -214,6 +325,7 @@ impl Escrow {
         require!(field.0 >= amount, "amount exceeds available balance");
         field.0 -= amount;
         self.lps.insert(lp_id.clone(), lp);
+        Event::WithdrawRequested { lp: lp_id.clone(), pot, amount: U128(amount) }.emit();
         Promise::new(self.token.clone())
             .function_call_weight(
                 "ft_transfer".to_string(),

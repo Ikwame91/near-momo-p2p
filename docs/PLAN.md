@@ -39,11 +39,14 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [x] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
 - [x] M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals. Check: tests.
 Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 scope review).
-- [ ] M1.3 [must] (first) NEP-297 events for LP actions (register, deposit, withdraw, quote change)
+- [x] M1.3 [must] (first) NEP-297 events for LP actions (register, deposit, withdraw, quote change)
       with no PII; provider limited to `"paystack" | "pawapay"` (D-017). Then bond/secret lock while
       orders open (inv. 4), bond rule (inv. 5), `pause_lp` / `resume_lp` with 1 yocto (inv. 14,
       T34). Check: failing→passing tests.
-- [ ] M1.4 [must] Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), paystack LP
+- [ ] M1.4 [must] (PR #9 review) `open_buy_order` locks ONLY via `lock_for_buy` and closes ONLY via
+      `unlock`, exactly once per order, with the amount stored on the order; quote min/max, new-buyer
+      cap and per-LP new-buyer exposure checked in the same step and reduced on close.
+      Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), paystack LP
       only, `key_fp` must be set, `ghs_amount` = ceil formula, new-buyer counter (`new_buyer_orders`)
       + per-order cap + per-LP exposure cap (inv. 14), order views `get_order` / `list_orders_by_lp`
       / `list_orders_by_buyer` (the web app needs them). Check: tests.
@@ -51,7 +54,9 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       UNVERIFIABLE / PENDING, replay protection, reference + `key_fp` must match, callback carries
       (order_id, attempt) and stale ones are ignored (inv. 1–3, 10, T15), `finalize_release`,
       claimable balances for failed transfers + `withdraw_claimable` (D-017). Check: tests.
-- [ ] M1.6 Retry window + slash with `min_failed_attempts`, failure classes `LP_FAULT` (`T_retry`) /
+- [ ] M1.6 [must] (PR #9 review) the slash debits `bond` in the same internal step that unlocks the
+      order; test `locked <= bond` after a slash with other orders open.
+      Retry window + slash with `min_failed_attempts`, failure classes `LP_FAULT` (`T_retry`) /
       `OUTAGE` (`T_outage_max`), contract-set OutLayer deposit/limits (T5, T8, T25, T30, T31,
       inv. 11, D-012). Check: tests with time travel.
 - [ ] M1.7 [must] Balance accounting invariant (inv. 6) checked after every test: contract balance
@@ -71,6 +76,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       (Paystack initialize: GHS, mobile_money only, synthetic email), `verify` output carries
       `key_fp`; `pending` reason; only 401 = `auth_error`, 403 and unknown = outage (D-017).
       Check: tests + testnet run.
+- [ ] M2.2c [must] Escrow `request_fingerprint` + callback (PR #9 review): stores `key_fp` only if
+      `key_fp` is None, zero open orders, `secret_gen` unchanged (bumped by `set_secret_ref`, so a
+      stale run for an old secret cannot land), exactly 64 lowercase hex; caller check in the body.
+      Check: tests incl. the stale-callback race.
 - [ ] M2.2b [must] Escrow `request_checkout(order_id)` → checkout mode → callback stores
       `authorization_url` (D-017). Check: tests + testnet run.
 - [ ] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
@@ -92,7 +101,8 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
 ## M3 Sell flow + settlement (Nov 8–10)
 - [ ] M3.0 [must] `scripts/lp-service` (minimal script, not a product): receives the seller's number
       + salt, sends the pawaPay payout with the salt metadata, calls `claim_payout`. Check: run.
-- [ ] M3.1 [must] Sell order: NEP-145 storage pre-payment, JSON `open_sell` msg, pawapay LP only,
+- [ ] M3.1 [must] Sell order: open sell orders count in the pawapay LP's `open_orders` (inv. 4,
+      PR #9 review); NEP-145 storage pre-payment, JSON `open_sell` msg, pawapay LP only,
       recipient commitment per SPEC §5 / D-018 (inv. 13), payoutId used once,
       UUID payout ids, `confirm_received`, `claim_payout` with pawaPay status + recipient check,
       refund with outage extension. Payout check via `PaymentProvider`: pawaPay sandbox (D-011),
