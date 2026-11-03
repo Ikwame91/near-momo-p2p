@@ -9,6 +9,27 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: M1.2 DONE (LP registration, deposits, withdrawals)
+Branch: `escrow/lp-bonds-and-deposits` (from main).
+Done: `contracts/escrow/src/lp.rs` + `lp_tests.rs`:
+- `register_lp(provider, secret_ref, quote)`: caller pays the storage of its record (refund of the
+  excess), rejects double registration, bad quotes (rate 0, min 0, min > max), bad names, and a
+  `secret_ref` that is not the LP's own (new T33, found in self-review).
+- `update_quote` (new orders only). `get_lp` view.
+- `ft_on_transfer(sender, amount, msg)`: only the configured token (inv. 9, T26); msg "bond" or
+  "liquidity"; amount > 0; sender must be a registered LP. Every rejection panics so NEP-141
+  refunds the full amount.
+- `withdraw_liquidity` / `withdraw_bond`: exactly 1 yoctoNEAR, only available balance, bond only
+  with zero open orders (inv. 4; exercised with real orders in M1.3). Debit first, `ft_transfer`,
+  then `on_withdraw` (#[private]) re-credits if the transfer failed.
+```
+cargo test (contracts/): escrow 51 passed (28 config + 23 LP); mock-ft 3 passed; 0 failed, 0 warnings
+cargo near build non-reproducible-wasm (escrow): OK (local only, not reproducible; D-015)
+```
+Failed / blocked: none. First run had 4 must-use warnings (detached refund promise, test helpers);
+fixed with `.detach()` (near-sdk 5.30 `Promise::detach`).
+Next: M1.3 bond/secret lock while orders open, bond rule, `pause_lp`.
+
 ## 2026-11-03 — Session 3: M1.1 fix-up after review of PR #5
 Done (each change has its reason in the code comment or DECISIONS):
 - No owner role (D-014): removed `owner`; all params fixed at init; SPEC §2, §7, inv. 8–9, T20, T26.
