@@ -142,3 +142,41 @@ order (T20).
 Alternatives: no slash during outages, refund the buyer instead (rejected: nothing to refund in
 the buy flow, and it would excuse an LP that deletes its secret); one window for all failures
 (rejected: harsher on honest LPs for no gain).
+
+## D-013 near-contract-standards for the mock USDC token (Nov 3, 2026)
+Status: accepted
+Context: Escrow tests (unit now, sandbox in M1.8) need a NEP-141 token that behaves like USDC
+(6 decimals, `ft_transfer_call` → `ft_on_transfer`, storage registration).
+Decision: `contracts/mock-ft` uses `near-contract-standards` 5.30 (same repo and version as
+near-sdk, https://github.com/near/near-sdk-rs), with an open `mint` for tests. TEST ONLY: never
+deployed outside testnet/sandbox; the escrow's token is fixed at init (inv. 9), and on mainnet it
+is native USDC.
+Alternatives: hand-written NEP-141 (more code to get wrong); using real testnet USDC (not
+mintable for tests).
+
+## D-014 No owner role in the escrow (Nov 3, 2026)
+Status: accepted (Kwame: "do what you have to do", reasoning below)
+Context: SPEC v0.2 said an owner could set timing and cap parameters before orders exist. The
+M1.1 scaffold stored an `owner` that did nothing. A reviewer asked us to pick one.
+Decision: remove the owner. Every parameter is fixed at init, like the token and verifier.
+Why (on its own merits, not because it was flagged): (1) the product claim is "nobody can change
+the rules, not even us"; an owner with any power makes that claim conditional and is one more key
+that can be stolen; (2) the only use was changing params before the first order, which is the same
+as deploying a new instance with the right params, and a new instance gets a new `deploy_tag`
+anyway; (3) a "before any order exists" guard needs extra state and tests, and gets subtle once
+orders can be closed (zero open orders is not zero orders ever). Cost: a parameter mistake means
+redeploying, which before launch is cheap.
+Alternatives: owner can change params until the first order (rejected: weaker claim, more code,
+no real benefit).
+
+## D-015 Pinned Rust toolchain + reproducible contract builds (Nov 3, 2026)
+Status: accepted
+Context: near-sdk 5.30 needs Rust >= 1.95, and nothing pinned it. The wasm hashes recorded in M1.1
+came from `cargo near build non-reproducible-wasm`, so nobody else could reproduce them.
+Decision: `rust-toolchain.toml` pins Rust 1.97.0 (+ wasm32-unknown-unknown, wasm32-wasip2) at the
+repo root. Both contracts carry `[package.metadata.near.reproducible_build]` with image
+`sourcescan/cargo-near:0.22.0-rust-1.97.0` pinned by digest (from Docker Hub). Hashes that matter
+(anything deployed or quoted to judges) come only from `cargo near build reproducible-wasm` on a
+committed tree; local non-reproducible hashes are labelled as such.
+Alternatives: pin only in the README (not enforced); skip reproducibility (judges cannot check that
+deployed code matches the source).

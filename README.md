@@ -8,6 +8,10 @@ Built for the NEAR Hackathon (Nov 1–14, 2026). Work in progress: see `docs/SPE
 
 **Status:** testnet + Paystack test mode only. No real money.
 
+**Build:** Rust is pinned by `rust-toolchain.toml` (1.97.0; near-sdk 5.30 needs >= 1.95), so
+`rustup` installs the right version automatically. Contracts: `cd contracts && cargo test`;
+reproducible wasm: `cd contracts/escrow && cargo near build reproducible-wasm` (needs Docker).
+
 **Buy flow (cedis → USDC):** Paystack test-mode mobile money payments, checked inside an
 OutLayer TEE. **Sell flow (USDC → cedis):** payouts run on the **pawaPay sandbox** (a Paystack
 Starter account cannot send transfers), with a clearly labelled simulated check as fallback.

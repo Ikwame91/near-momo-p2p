@@ -36,7 +36,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M0.9 Go/no-go: write results in PROGRESS.md, decide SPEC Q4 in DECISIONS.md, update SPEC.
 
 ## M1 Escrow core (Nov 3–6): contract logic with unit tests, no OutLayer yet
-- [ ] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
+- [x] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
 - [ ] M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals. Check: tests.
 - [ ] M1.3 Bond/secret lock while orders open (inv. 4), bond rule (inv. 5), `pause_lp` (inv. 14). Check: failing→passing tests.
 - [ ] M1.4 Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), new-buyer cap + per-LP
@@ -62,7 +62,9 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
 - [ ] M2.6 Reproducible verifier build (rust-toolchain.toml; OutLayer GitHub compile if possible,
       SPEC Q7). Check: a second build gives the same sha256.
-- [ ] M2.7 Remove the escrow's full-access key before the demo, or document upgrade trust (inv. 9).
+- [ ] M2.7 Deploy the escrow from a reproducible build, with deploy + `new` in ONE batched transaction
+      signed by the contract account (T32); then remove its full-access key, or document upgrade
+      trust (inv. 9).
 - [ ] M2.5 Hostile review (PROMPTS.md §8) of contract + verifier; fix findings with tests.
 
 ## M3 Sell flow + settlement (Nov 8–10)

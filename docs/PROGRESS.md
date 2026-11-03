@@ -9,6 +9,57 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: M1.1 fix-up after review of PR #5
+Done (each change has its reason in the code comment or DECISIONS):
+- No owner role (D-014): removed `owner`; all params fixed at init; SPEC §2, §7, inv. 8–9, T20, T26.
+- `new` callable only by the contract account (T32, found in this review): explicit `require!`
+  in the body, because `#[private]` is enforced only in the wasm entry point and a unit test
+  calling `new` directly did NOT panic (the test caught that). PLAN M2.7: deploy + init in one tx.
+- `Params.outlayer_call` (inv. 11): fee, gas 100–250 TGas, callback ≥ 10 TGas, total ≤ 280,
+  instructions ≤ 500e9, memory ≤ 4096 MB, seconds ≤ 180 (OutLayer docs maximums).
+- Init rejects token = outlayer, token/outlayer = the contract itself.
+- deploy_tag formula `sha256(contract_id ":" height)` now identical in code, SPEC §4.1, T27, with a
+  test against the literal formula.
+- Tests added: zero t_pay / t_retry / fee, low/high gas, instruction/memory/second bounds and
+  maximums, empty Project id/version, valid Project, UPPERCASE 64-char hash, non-hex 64-char hash.
+- mock-ft: minting to a NEW account requires the storage deposit (stops draining its NEAR);
+  `ft_resolve_transfer` emits FtBurn when a refund is burned. 2 new tests.
+- `rust-toolchain.toml` (1.97.0), reproducible-build metadata in both Cargo.toml files (D-015),
+  README build note. Old local hashes above labelled "not reproducible".
+```
+cargo test (contracts/): escrow 28 passed; mock-ft 3 passed; 0 failed, 0 warnings
+```
+Failed / blocked: first run had 1 failure (`init_by_another_account_is_rejected`: `#[private]` not
+visible to unit tests); fixed by the explicit check above.
+Reproducible build attempt (commit c3e90b5, `cargo near build reproducible-wasm`, dockerd started
+in the container): git clean check + image digest OK, then `docker image pull
+sourcescan/cargo-near:0.22.0-rust-1.97.0@sha256:b193c864…` → Docker Hub `429 Too Many Requests`
+(anonymous pull rate limit). Tried twice; stopped per the 2-attempt rule. Not a config problem.
+Next: retry the reproducible build in a later session (before M2.7 deploy, PLAN M2.7); if Docker
+Hub keeps rate-limiting, Kwame adds Docker Hub credentials as a secret. Then Test B2 or M1.2.
+
+## 2026-11-03 — Session 3: M1.1 DONE (escrow scaffold + mock USDC)
+Branch: `escrow/scaffold-and-mock-usdc` (from main after PR #4).
+Done: `contracts/` cargo workspace (shared release profile).
+- `contracts/escrow`: `new(owner, token, outlayer, verifier, params)` stores the deploy-time config
+  with no setters (inv. 9); `deploy_tag` = first 8 hex of sha256(contract_id ":" block_height)
+  (inv. 12, T27); validates verifier (https URL + 64-hex sha256, or project+version) and params
+  (t_outage_max >= t_retry, min_failed_attempts >= 1, outlayer_fee > 0); `get_config` view.
+- `contracts/mock-ft`: TEST ONLY NEP-141 mUSDC, 6 decimals, open `mint` (D-013).
+```
+cargo test (contracts/):
+  escrow: 6 passed (init_stores_fixed_config, deploy_tag_is_8_hex_and_differs_per_deployment,
+          rejects_bad_verifier_hash, rejects_http_verifier_url,
+          rejects_outage_window_shorter_than_retry, rejects_zero_failed_attempts)
+  mock-ft: 1 passed (mint_and_transfer)
+cargo near build non-reproducible-wasm (LOCAL ONLY, not reproducible, do not quote; see D-015):
+  openramp_escrow.wasm  115750 B  sha256 a9de3590726ccb5f18be1bdfc5aa1f5c0e79699cab1cc1a245f4f38327782f26
+  openramp_mock_ft.wasm 146163 B  sha256 253a471face17da507740f049d45cbbc246235fc462c01f76ee5d26ea42330e6
+```
+Failed / blocked: none.
+Next: M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals.
+Gotchas: commits no longer carry the Claude co-author / session trailers (Kwame, Nov 3).
+
 ## 2026-11-02 — Session 2: pawaPay decision + slash timing (docs only)
 Branch: `docs/pawapay-decision-and-slash-rule` (from main after PR #3).
 Done: D-011 (pawaPay sandbox for sell payouts, demo only; production = licensed LPs; Korapay
