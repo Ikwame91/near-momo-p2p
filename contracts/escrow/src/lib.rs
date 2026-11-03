@@ -7,7 +7,20 @@
 //! LPs, orders and verdicts arrive in M1.2+.
 
 use near_sdk::json_types::U128;
-use near_sdk::{env, near, require, AccountId, PanicOnDefault};
+use near_sdk::store::LookupMap;
+use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
+
+mod lp;
+pub use lp::{Lp, Pot, Quote, SecretRef};
+
+#[cfg(test)]
+mod lp_tests;
+
+#[near]
+#[derive(BorshStorageKey)]
+enum StorageKey {
+    Lps,
+}
 
 /// Which OutLayer program checks payments. Fixed at deploy (invariant 9, T21, T26).
 #[near(serializers = [json, borsh])]
@@ -82,6 +95,7 @@ pub struct Escrow {
     verifier: VerifierSource,
     params: Params,
     deploy_tag: String,
+    lps: LookupMap<AccountId, Lp>,
 }
 
 /// First 8 hex chars of sha256(contract_id ":" init_block_height), height in decimal
@@ -138,7 +152,7 @@ impl Escrow {
         require!(env::predecessor_account_id() == me, "only the contract account can initialise it");
         validate(&me, &token, &outlayer, &verifier, &params);
         let deploy_tag = compute_deploy_tag(&me, env::block_height());
-        Self { token, outlayer, verifier, params, deploy_tag }
+        Self { token, outlayer, verifier, params, deploy_tag, lps: LookupMap::new(StorageKey::Lps) }
     }
 
     pub fn get_config(&self) -> ConfigView {
@@ -153,19 +167,19 @@ impl Escrow {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use near_sdk::test_utils::VMContextBuilder;
     use near_sdk::testing_env;
 
     const MIN: u64 = 60_000_000_000;
-    const ME: &str = "escrow.testnet";
+    pub(crate) const ME: &str = "escrow.testnet";
 
-    fn acc(s: &str) -> AccountId {
+    pub(crate) fn acc(s: &str) -> AccountId {
         s.parse().unwrap()
     }
 
-    fn params() -> Params {
+    pub(crate) fn params() -> Params {
         // Demo values from SPEC §7; OutLayer values as used in Test A (M0.4/M0.5).
         Params {
             t_pay_ns: 10 * MIN,
@@ -186,7 +200,7 @@ mod tests {
         }
     }
 
-    fn verifier() -> VerifierSource {
+    pub(crate) fn verifier() -> VerifierSource {
         VerifierSource::WasmUrl {
             url: "https://raw.githubusercontent.com/Ikwame91/near-momo-p2p/abc/wasm/verifier.wasm".into(),
             hash: "021f8568f2cc9001e7060fedb02786fb02212b5e8ad8ffedd3f35c98b3d49c61".into(),
@@ -194,7 +208,7 @@ mod tests {
     }
 
     /// Context where the contract calls itself (as in a deploy + init batch).
-    fn ctx(height: u64) {
+    pub(crate) fn ctx(height: u64) {
         testing_env!(VMContextBuilder::new()
             .current_account_id(acc(ME))
             .predecessor_account_id(acc(ME))
@@ -202,7 +216,7 @@ mod tests {
             .build());
     }
 
-    fn init_with(verifier: VerifierSource, p: Params) -> Escrow {
+    pub(crate) fn init_with(verifier: VerifierSource, p: Params) -> Escrow {
         Escrow::new(acc("usdc.testnet"), acc("outlayer.testnet"), verifier, p)
     }
 

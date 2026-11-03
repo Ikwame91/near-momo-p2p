@@ -34,7 +34,8 @@ in the same transaction as the deploy (invariant 9, T32).
 
 ## 3. LP lifecycle
 1. `register_lp(provider, secret_ref, rate_ghs_per_usdc, min, max, new_buyer_exposure_max)`:
-   registers which OutLayer secret holds the LP's Paystack key and the LP's quote. The contract then
+   registers which OutLayer secret holds the LP's Paystack key and the LP's quote. The secret must
+   be the LP's own (`secret_ref.account_id` = the LP; T33). The contract then
    runs the verifier once in `fingerprint` mode: inside the TEE it reads the key and returns
    `key_fp = sha256(key)`, which the contract stores. The LP takes no orders until `key_fp` is set.
    The LP stores the secret bound to the verifier wasm hash and readable only via the escrow
