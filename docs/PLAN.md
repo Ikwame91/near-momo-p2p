@@ -43,7 +43,7 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       with no PII; provider limited to `"paystack" | "pawapay"` (D-017). Then bond/secret lock while
       orders open (inv. 4), bond rule (inv. 5), `pause_lp` / `resume_lp` with 1 yocto (inv. 14,
       T34). Check: failing→passing tests.
-- [ ] M1.4 [must] (PR #9 review) `open_buy_order` locks ONLY via `lock_for_buy` and closes ONLY via
+- [x] M1.4 [must] (PR #9 review) `open_buy_order` locks ONLY via `lock_for_buy` and closes ONLY via
       `unlock`, exactly once per order, with the amount stored on the order; quote min/max, new-buyer
       cap and per-LP new-buyer exposure checked in the same step and reduced on close.
       Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), paystack LP

@@ -30,7 +30,6 @@ pub(crate) const MAX_PROFILE_LEN: usize = 64;
 /// The only providers (D-017): "paystack" = buy-side LP (collects cedis), "pawapay" = sell-side
 /// LP (pays cedis out).
 pub const PROVIDERS: [&str; 2] = ["paystack", "pawapay"];
-#[cfg_attr(not(test), expect(dead_code))] // used by lock_for_buy
 pub(crate) const PROVIDER_BUY: &str = "paystack";
 
 /// Names the OutLayer secret that holds the LP's provider key (never the key itself, inv. 7).
@@ -65,6 +64,8 @@ pub struct Lp {
     /// USDC locked in open orders (M1.4).
     pub locked: U128,
     pub open_orders: u32,
+    /// USDC locked in open orders of NEW buyers; capped by `quote.new_buyer_exposure_max` (inv. 14).
+    pub new_buyer_open: U128,
     pub paused: bool,
     /// sha256 of the LP's provider key, hex; set by the TEE fingerprint run. No orders until set
     /// (SPEC §3.1, T24).
@@ -123,6 +124,7 @@ impl Escrow {
                 liquidity: zero,
                 locked: zero,
                 open_orders: 0,
+                new_buyer_open: zero,
                 paused: false,
                 key_fp: None,
             },
@@ -263,17 +265,26 @@ impl Escrow {
         }
     }
 
-    /// Lock `amount` of a buy-side LP's liquidity for a new buy order (used by M1.4). Enforces:
-    /// LP registered, provider "paystack", not paused (inv. 14), `key_fp` set (SPEC §3.1), enough
-    /// liquidity, and the bond rule `locked + amount <= bond` (inv. 5), so a slash can always be
-    /// paid in full from the bond.
-    #[cfg_attr(not(test), expect(dead_code))] // called by buy orders from M1.4
-    pub(crate) fn lock_for_buy(&mut self, lp_id: &AccountId, amount: u128) {
+    /// Lock `amount` of a buy-side LP's liquidity for a new buy order. All order limits are checked
+    /// here, in the same step as the lock (PR #9 review): LP registered, provider "paystack", not
+    /// paused (inv. 14), `key_fp` set (SPEC §3.1), quote min/max, for a new buyer the per-order cap
+    /// and the LP's new-buyer exposure (inv. 14, T29), enough liquidity, and the bond rule
+    /// `locked + amount <= bond` (inv. 5), so a slash can always be paid in full from the bond.
+    pub(crate) fn lock_for_buy(&mut self, lp_id: &AccountId, amount: u128, new_buyer: bool) {
         require!(amount > 0, "amount must be > 0");
+        let new_buyer_cap = self.params.new_buyer_cap.0;
         let lp = self.lps.get_mut(lp_id).unwrap_or_else(|| env::panic_str("not a registered LP"));
         require!(lp.provider == PROVIDER_BUY, "LP does not serve buy orders");
         require!(!lp.paused, "LP is paused");
         require!(lp.key_fp.is_some(), "LP key not fingerprinted yet");
+        require!(amount >= lp.quote.min_usdc.0, "amount below the LP's minimum");
+        require!(amount <= lp.quote.max_usdc.0, "amount above the LP's maximum");
+        if new_buyer {
+            require!(amount <= new_buyer_cap, "amount above the new-buyer cap");
+            let exposure = lp.new_buyer_open.0.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow"));
+            require!(exposure <= lp.quote.new_buyer_exposure_max.0, "LP's new-buyer exposure limit reached");
+            lp.new_buyer_open.0 = exposure;
+        }
         require!(lp.liquidity.0 >= amount, "not enough LP liquidity");
         let locked = lp.locked.0.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow"));
         require!(locked <= lp.bond.0, "bond does not cover this order");
@@ -284,14 +295,17 @@ impl Escrow {
 
     /// Close an order's lock (used by M1.4+): the locked USDC either goes back to the LP's
     /// liquidity (expired, slashed) or leaves the LP (released to the buyer).
-    /// M1.4 MUST call this exactly once per order, with the amount stored on that order, and a
-    /// slash MUST debit the bond in the same step (PLAN M1.4/M1.6).
-    #[cfg_attr(not(test), expect(dead_code))] // called by buy orders from M1.4
-    pub(crate) fn unlock(&mut self, lp_id: &AccountId, amount: u128, back_to_liquidity: bool) {
+    /// Called exactly once per order, with the amount and new-buyer flag stored on that order, and
+    /// a slash MUST debit the bond in the same step (PLAN M1.6).
+    pub(crate) fn unlock(&mut self, lp_id: &AccountId, amount: u128, back_to_liquidity: bool, new_buyer: bool) {
         require!(amount > 0, "amount must be > 0");
         let lp = self.lps.get_mut(lp_id).unwrap_or_else(|| env::panic_str("not a registered LP"));
         require!(lp.open_orders > 0, "no open orders");
         require!(lp.locked.0 >= amount, "unlock exceeds locked");
+        if new_buyer {
+            require!(lp.new_buyer_open.0 >= amount, "unlock exceeds new-buyer exposure");
+            lp.new_buyer_open.0 -= amount;
+        }
         lp.locked.0 -= amount;
         lp.open_orders -= 1;
         if back_to_liquidity {

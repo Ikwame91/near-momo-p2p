@@ -83,7 +83,12 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
    is bound to this order; `deploy_tag` = first 8 hex chars of
    `sha256(contract_id ":" init_block_height)` with the height in decimal, e.g.
    `sha256("escrow.testnet:100")`, so references never repeat across deployments).
-   State `AWAITING_PAYMENT`, `pay_deadline = now + T_pay`.
+   State `AWAITING_PAYMENT`, `pay_deadline = now + T_pay`. The buyer attaches NEAR for the order's
+   storage (excess refunded); an LP cannot buy from itself. Anyone may call `expire_order` once
+   `now > pay_deadline + T_grace` while the order still awaits payment. Views: `get_order`,
+   `list_orders_by_lp` / `list_orders_by_buyer` (pages of ≤ 50), `get_buyer_released`. Timestamps
+   and amounts are JSON strings (`U64` / `U128`), because ns timestamps exceed JavaScript's 2^53.
+   Events: `order_opened`, `order_expired`.
 2. Buyer calls `request_checkout(order_id)` (fee set by the contract, as in step 3). The escrow
    runs the verifier in `checkout` mode inside the TEE with **the same LP key** that later verifies
    it (Paystack `POST /transaction/initialize` with the order's reference and amount,

@@ -9,6 +9,36 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: M1.4 DONE (buy orders: open, expire, limits, views)
+Branch: `escrow/buy-orders` (from main after PR #9).
+Done (`src/orders.rs`, `src/orders_tests.rs`, `lp.rs`, `lib.rs`, `events.rs`):
+- `open_buy_order(lp, usdc_amount)` (payable: buyer pays order storage, excess refunded):
+  reference `opr-<deploy_tag>-<id>`, `ghs_amount_pesewas = ceil(usdc × rate / 1e6)` (checked,
+  > 0, ≤ u64), `pay_deadline = now + t_pay`, no self-buy. Locks ONLY via `lock_for_buy`, which now
+  also checks quote min/max, the new-buyer per-order cap and the LP's new-buyer exposure in the
+  same step (PR #9 review). `Lp.new_buyer_open` tracks exposure.
+- `expire_order(id)`: anyone, only AWAITING_PAYMENT and after pay_deadline + t_grace; closes ONLY
+  via `unlock` once, with the stored amount and new-buyer flag.
+- `Params.new_buyer_orders` (1–100, demo 3); `buyer_released` counter (incremented on release in
+  M1.5). Views get_order / list_orders_by_lp / list_orders_by_buyer (≤ 50) / get_buyer_released.
+- Events order_opened, order_expired. Timestamps as U64 strings in JSON (> 2^53).
+- `expect(dead_code)` removed: the helpers are now used.
+```
+$ cd contracts && cargo test
+     Running unittests src/lib.rs (target/debug/deps/openramp_escrow-d81469ffa25a38a7)
+test result: ok. 151 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.94s
+     Running unittests src/lib.rs (target/debug/deps/openramp_mock_ft-f436da86f5147f23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+$ cargo clippy --all-targets 2>&1 | grep -cE '^(warning|error)'
+0
+```
+Failed / blocked: first compile missed an import (EscrowExt); one clippy nit in a test helper;
+`lock_beyond_the_bond_fails` now locks 1 USDC instead of 1 unit, because the new quote-minimum
+check (1 USDC) would otherwise fire before the bond check (test intent unchanged).
+Next: reviewer subagents on the PR, fix, merge; then M1.5 verdict handling.
+
 ## 2026-11-03 — Session 3: PR #9 review fix-ups (2 reviewers, D-019)
 Reviewers found no fund-safety bug. Fixed in commit 96f3acb (code + SPEC) and the following docs
 commits (my docs script stopped twice on text that did not match; re-applied file by file):
