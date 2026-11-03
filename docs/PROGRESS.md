@@ -31,8 +31,12 @@ cargo test (contracts/): escrow 28 passed; mock-ft 3 passed; 0 failed, 0 warning
 ```
 Failed / blocked: first run had 1 failure (`init_by_another_account_is_rejected`: `#[private]` not
 visible to unit tests); fixed by the explicit check above.
-Next: reproducible builds of both contracts on the committed tree (Docker works here), record
-hashes. Then Test B2 or M1.2 (Kwame's choice).
+Reproducible build attempt (commit c3e90b5, `cargo near build reproducible-wasm`, dockerd started
+in the container): git clean check + image digest OK, then `docker image pull
+sourcescan/cargo-near:0.22.0-rust-1.97.0@sha256:b193c864…` → Docker Hub `429 Too Many Requests`
+(anonymous pull rate limit). Tried twice; stopped per the 2-attempt rule. Not a config problem.
+Next: retry the reproducible build in a later session (before M2.7 deploy, PLAN M2.7); if Docker
+Hub keeps rate-limiting, Kwame adds Docker Hub credentials as a secret. Then Test B2 or M1.2.
 
 ## 2026-11-03 — Session 3: M1.1 DONE (escrow scaffold + mock USDC)
 Branch: `escrow/scaffold-and-mock-usdc` (from main after PR #4).
