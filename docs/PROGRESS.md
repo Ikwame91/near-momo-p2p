@@ -9,6 +9,35 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: M0.6b Test B2 DONE (pawaPay sandbox payouts)
+Branch: `test-b2/pawapay-sandbox-payouts` (from main after PR #5).
+Setup check: Kwame's sandbox token works through the proxy (network secret; no env var).
+`GET /v2/wallet-balances` 200, company "near-momo-p2p", GHA wallet GHS 10000, Ghana MTN /
+Vodafone / AirtelTigo OPERATIONAL for payout + deposit (limits GHS 1–15000 / 1–10000).
+`python3 scripts/test-b/pawapay_payouts.py` → exit 0:
+```
+PASS config: HTTP 200, MTN_MOMO_GHA GHS PAYOUT=OPERATIONAL, GHA providers=['AIRTELTIGO_GHA', 'MTN_MOMO_GHA', 'VODAFONE_GHA']
+PASS wallet: GHA GHS balance before = 10000
+PASS initiate completed: HTTP 200, status=ACCEPTED, payoutId=e97a215e-4a39-4c4b-8563-e458f82582a4, to ***789, failure=None
+PASS initiate failed: HTTP 200, status=ACCEPTED, payoutId=3d1a6ac3-f7ea-4d80-a7c7-a5217160105e, to ***089, failure=None
+PASS initiate pending: HTTP 200, status=ACCEPTED, payoutId=85c4834a-0231-4148-aaf6-ab902137171d, to ***129, failure=None
+PASS duplicate payoutId: HTTP 200, status=DUPLICATE_IGNORED
+PASS status completed: found=FOUND, status=COMPLETED, failure=None, amount=5.00 GHS, recipient ***789 MTN_MOMO_GHA (matches sent: True)
+PASS status failed: found=FOUND, status=FAILED, failure=RECIPIENT_NOT_FOUND, amount=5.00 GHS, recipient ***089 MTN_MOMO_GHA (matches sent: True)
+PASS status pending: found=FOUND, status=IN_RECONCILIATION, failure=None, amount=5.00 GHS, recipient ***129 MTN_MOMO_GHA (matches sent: True)
+PASS status unknown id: HTTP 200, status=NOT_FOUND
+INFO wallet GHA GHS: before=10000, after=9989.9
+```
+Findings:
+- Status returns recipient `phoneNumber` + `provider`: the T23 recipient check is feasible.
+- Reused payoutId → `DUPLICATE_IGNORED` (replay protection on pawaPay's side too).
+- The docs' "SUBMITTED" number 233593456129 actually goes to `IN_RECONCILIATION` → maps to
+  UNVERIFIABLE / OUTAGE: a real trigger for the sell-flow "provider stuck, window extended" demo.
+- Amount echoed as "5.00" for "5": compare as numbers (SPEC §5 updated).
+- Wallet dropped 10.1 GHS: 5 completed + 5 held in reconciliation + 0.1 fees; failed payout not charged.
+Failed / blocked: none. Korapay fallback not needed.
+Next: M1.2 LP registration, bond and liquidity deposits.
+
 ## 2026-11-03 — Session 3: M1.1 fix-up after review of PR #5
 Done (each change has its reason in the code comment or DECISIONS):
 - No owner role (D-014): removed `owner`; all params fixed at init; SPEC §2, §7, inv. 8–9, T20, T26.
