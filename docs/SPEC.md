@@ -1,7 +1,9 @@
 # OpenRamp: Specification
 
-Status: v0.3 APPROVED by Kwame (Nov 2, 2026). v0.2 added the design-audit fixes (D-009, T23–T30);
-v0.3 adds failure classes with an outage extension (D-012) and pawaPay sandbox payouts (D-011).
+Status: v0.4 APPROVED by Kwame (Nov 3, 2026). v0.2 added the design-audit fixes (D-009, T23–T30);
+v0.3 failure classes (D-012) and pawaPay sandbox payouts (D-011); v0.4 no owner (D-014), review
+fix-ups (D-016), pending = outage, one provider per LP, checkout through the escrow, sell-order
+salt via pawaPay metadata (D-017, D-018).
 Anything marked **[confirm in Test X]** is an assumption about an external API that a feasibility
 test must prove before we build on it.
 
@@ -21,7 +23,7 @@ the LP's API key (the key never leaves the TEE).
 |---|---|---|
 | Buyer | Person or agent wanting USDC | Opens a buy order, pays mobile money, claims USDC |
 | Seller | Person or agent wanting cedis | Locks USDC in a sell order, receives mobile money |
-| LP | Liquidity provider (a merchant with a Paystack account) | Posts a bond and USDC liquidity, sets a rate, receives/sends mobile money |
+| LP | Liquidity provider with ONE provider account: Paystack (buy-side LP, receives cedis) or pawaPay (sell-side LP, pays cedis) (D-017) | Posts a bond and USDC liquidity, sets a rate, receives or sends mobile money |
 | Verifier | OutLayer program in a TEE | Calls the provider API with the LP's secret key, returns PAID / NOT_PAID / UNVERIFIABLE |
 | Escrow contract | NEAR contract `contracts/escrow` | Holds USDC and bonds, runs the order state machine |
 | Settlement | NEAR Intents 1Click API | Moves released USDC to another chain if the user wants |
@@ -33,11 +35,15 @@ instance, which gets its own `deploy_tag`. Only the contract's own account can i
 in the same transaction as the deploy (invariant 9, T32).
 
 ## 3. LP lifecycle
-1. `register_lp(provider, secret_ref, rate_ghs_per_usdc, min, max, new_buyer_exposure_max)`:
-   registers which OutLayer secret holds the LP's Paystack key and the LP's quote. The secret must
-   be the LP's own (`secret_ref.account_id` = the LP; T33). The contract then
+1. `register_lp(provider, secret_ref, quote{rate_pesewas_per_usdc, min_usdc, max_usdc,
+   new_buyer_exposure_max})`: `provider` is exactly `"paystack"` (buy-side LP) or `"pawapay"`
+   (sell-side LP); buy orders need a paystack LP, sell orders a pawapay LP (D-017). Registers which
+   OutLayer secret holds the LP's provider key (Paystack secret key or pawaPay API token) and the
+   LP's quote. The secret must be the LP's own (`secret_ref.account_id` = the LP; T33). One
+   verifier wasm serves both providers and dispatches on `provider`. The contract then
    runs the verifier once in `fingerprint` mode: inside the TEE it reads the key and returns
-   `key_fp = sha256(key)`, which the contract stores. The LP takes no orders until `key_fp` is set.
+   `key_fp = sha256(key)` (for either provider's key), which the contract stores. The LP takes no
+   orders until `key_fp` is set. Every change to the LP's settings requires 1 yoctoNEAR (T34).
    The LP stores the secret bound to the verifier wasm hash and readable only via the escrow
    (`--access allow-all --via <escrow>`, proven in Test A).
 2. Deposit bond (USDC, `ft_transfer_call` with msg `bond`).
@@ -59,16 +65,23 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
 ## 4. Buy flow (cedis → USDC)
 1. Buyer calls `open_buy_order(lp, usdc_amount)`. Contract checks the LP is not paused, LP limits,
    the bond rule, the per-account new-buyer cap and the LP's `new_buyer_exposure_max`, locks
-   `usdc_amount` of LP liquidity, and computes `ghs_amount` from the LP rate. It issues `order_id`
+   `usdc_amount` of LP liquidity, and computes `ghs_amount_pesewas = ceil(usdc_amount ×
+   rate_pesewas_per_usdc / 1_000_000)` with checked maths (rounded **up**, protecting the LP); it
+   must be > 0 and fit in u64. A buyer is **new** while they have fewer than `new_buyer_orders`
+   RELEASED buy orders in this deployment; for a new buyer each order is capped at `new_buyer_cap`
+   and counts towards the LP's `new_buyer_exposure_max` (D-017). It issues `order_id`
    and the **payment reference** `opr-<deploy_tag>-<order_id>` (derived only by the contract, so it
    is bound to this order; `deploy_tag` = first 8 hex chars of
    `sha256(contract_id ":" init_block_height)` with the height in decimal, e.g.
    `sha256("escrow.testnet:100")`, so references never repeat across deployments).
    State `AWAITING_PAYMENT`, `pay_deadline = now + T_pay`.
-2. Buyer pays `ghs_amount` through a Paystack checkout with that reference. The checkout is created
-   by the verifier in `checkout` mode, inside the TEE, with **the same LP key** that later verifies
-   it (Paystack `POST /transaction/initialize`), so payment and check are always on one Paystack
-   account (T24). **[confirm in M2]** whether this runs on-chain or via OutLayer's HTTPS API.
+2. Buyer calls `request_checkout(order_id)` (fee set by the contract, as in step 3). The escrow
+   runs the verifier in `checkout` mode inside the TEE with **the same LP key** that later verifies
+   it (Paystack `POST /transaction/initialize` with the order's reference and amount,
+   `currency: "GHS"`, `channels: ["mobile_money"]` so no card payments or chargebacks, and a fixed
+   synthetic email, no PII); the callback stores the returned `authorization_url` on the order.
+   It must go through the escrow because the LP's secret is readable only via the escrow (D-017,
+   answers Q6). Buyer pays `ghs_amount` on that Paystack page.
    The phone number is entered only on Paystack's page, never sent to the contract.
    Confirmed in Test A (M0.5): test mode accepts a custom reference for a mobile money charge.
 3. Buyer (or anyone) calls `claim(order_id)` and attaches at least `outlayer_fee`. The **contract**
@@ -82,13 +95,20 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
    this order's and `key_fp` equals the LP's registered one; otherwise it is UNVERIFIABLE. Verdicts:
    - `PAID` if status = success, amount ≥ expected, currency = GHS, reference matches, paid
      before `pay_deadline`.
-   - `NOT_PAID` if Paystack answers clearly and any of the above fails (not found, pending,
-     failed, short amount, late).
-   - `UNVERIFIABLE` on auth error (key revoked/invalid), network/5xx error, timeout, or
-     malformed response.
+   - `NOT_PAID` if Paystack answers clearly and any of the above fails: not found, `failed`,
+     `abandoned`, `reversed`, short amount, wrong currency, late.
+   - `PENDING` (verifier reason `pending`) if the charge is still in flight (`pending`, `ongoing`,
+     `processing`, `queued`, `send_otp`, `pay_offline`, …). Treated as `OUTAGE`, never as NOT_PAID,
+     because the buyer may have approved on the phone and the money can still arrive (T35, D-017).
+   - `UNVERIFIABLE` on auth error (401: key revoked/invalid), network/5xx error, timeout, 403 (WAF /
+     outage, not LP fault), or malformed response.
 5. Callback (accepted only for this order's pending request):
    - `PAID` → record reference as used → release USDC to buyer (state `RELEASED`), or
-     `RELEASE_PENDING` until `release_at` if a release delay applies.
+     `RELEASE_PENDING` until `release_at` if a release delay applies; after that anyone may call
+     `finalize_release(order_id)`. If the USDC transfer to the recipient fails (e.g. not registered
+     on the token), the amount is credited to a **claimable balance** for that account, which
+     anyone may retry with `withdraw_claimable(account)`; the books stay exact (inv. 6, D-017). The
+     same applies to slash payouts and seller refunds.
    - `NOT_PAID` → back to `AWAITING_PAYMENT` if before `pay_deadline + T_grace`, else `EXPIRED`
      (LP liquidity unlocked).
    - `UNVERIFIABLE`, wrong reference or `key_fp`, OutLayer error (`null`), no value, or yield
@@ -98,8 +118,11 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
 
      | Class | Results | Slash window |
      |---|---|---|
-     | `LP_FAULT` | verifier `auth_error` / `no_key` (key revoked or missing), `key_fp` mismatch | `T_retry` |
-     | `OUTAGE` | verifier `server_error` / `network_error` / `unclear_4xx` / `malformed` / `unexpected_status`, provider IN_RECONCILIATION, OutLayer `null`, no value, yield timeout | `T_outage_max` |
+     | `LP_FAULT` | verifier `auth_error` (HTTP 401 only) / `no_key` (key revoked or missing), `key_fp` mismatch | `T_retry` |
+     | `OUTAGE` | verifier `pending`, `server_error`, `network_error`, 403, `unclear_4xx`, `malformed`, `unexpected_status`, any unknown reason; provider IN_RECONCILIATION or pending; OutLayer `null`, no value, yield timeout | `T_outage_max` |
+
+     Pending payments end at the same hard limit `T_outage_max`, so neither side can stall an
+     order forever (D-017).
 
      If any failure in the current unverified streak is `LP_FAULT`, the window is `T_retry`;
      otherwise `T_outage_max`. A buyer cannot produce an `LP_FAULT` result. An LP can make a run
@@ -124,31 +147,50 @@ provider stays as a fallback in a separate, clearly labelled verifier build. paw
 - Amounts are strings; pawaPay may echo a different format than sent (Test B2: sent `"5"`,
   status returned `"5.00"`), so the verifier converts both to pesewas and compares numbers.
 - Status mapping (`GET /v2/payouts/{payoutId}`, https://docs.pawapay.io/v2/api-reference/payouts/check-payout-status):
-  `COMPLETED` + amount, currency, recipient phone and provider match → PAID; `FAILED`,
-  `NOT_FOUND`, or any mismatch → NOT_PAID; `ACCEPTED` / `ENQUEUED` / `PROCESSING` → NOT_PAID
-  for now (pending; the LP re-checks before the deadline); `IN_RECONCILIATION`, auth error, 5xx →
-  UNVERIFIABLE (classes as in §4.5).
-1. Seller sends USDC with `ft_transfer_call(msg: open_sell{lp, recipient_commitment})`, where
-   `recipient_commitment = sha256(salt ‖ msisdn ‖ provider_code)` and `salt` is 32 random bytes the
-   seller keeps (so the number cannot be brute-forced from the hash). Contract locks the USDC and
+  `COMPLETED` + amount, currency, payoutId, recipient commitment (below) and `key_fp` match → PAID;
+  `FAILED`, `NOT_FOUND`, or any mismatch → NOT_PAID; `ACCEPTED` / `ENQUEUED` / `PROCESSING` →
+  `PENDING` = `OUTAGE` class, never NOT_PAID (otherwise the seller could refund while the payout is
+  still in flight and keep both, T36, D-017); `IN_RECONCILIATION`, 5xx → `OUTAGE`; 401 → `LP_FAULT`.
+
+**Recipient commitment (Q5, D-018).** The seller's number and salt never go on-chain:
+1. Hash input, unambiguous and versioned:
+   `recipient_commitment = sha256("openramp-sell-v1|" + salt + "|" + number + "|" + provider)` where
+   `salt` = 64 lowercase hex chars (32 random bytes), `number` = E.164 digits only, no `+`
+   (e.g. `233593456789`), `provider` = pawaPay provider code (`MTN_MOMO_GHA`, `VODAFONE_GHA`,
+   `AIRTELTIGO_GHA`). The web app generates a **fresh salt for every order**.
+2. The seller gives the LP service the number and salt privately (web app → LP service). The LP
+   pays with pawaPay and attaches the salt as the payout's **only** metadata field,
+   `[{"openrampSalt": <salt>, "isPII": true}]`.
+3. The verifier reads `GET /v2/payouts/{payoutId}` with the LP's key and checks: `COMPLETED`,
+   amount and currency, that `payoutId` is the one derived from this order, **exactly one**
+   metadata field named `openrampSalt` holding 64 lowercase hex (anything else → NOT_PAID), and
+   `sha256("openramp-sell-v1|" + salt + "|" + recipient.phoneNumber + "|" + recipient.provider)`
+   = the on-chain commitment. Proven in the sandbox (PROGRESS Nov 3): the status reply returns the
+   metadata in clear as an object, `"metadata": {"openrampSalt": "<salt>"}`.
+4. The contract marks each `payoutId` as used (one payout settles one order, like inv. 3), and
+   `key_fp` covers the pawaPay token (§3.1).
+5. pawaPay and the LP can see the salt. Accepted: both already know the seller's number, which is
+   all the salt protects.
+1. Seller sends USDC with `ft_transfer_call(msg: {"open_sell": {lp, recipient_commitment}})`
+   (JSON msg), with the commitment defined above. Contract locks the USDC and
    issues `order_id`, reference `opr-<deploy_tag>-<order_id>`. State `AWAITING_PAYOUT`,
    `payout_deadline = now + T_pay`.
-2. Seller gives the LP their mobile money number **off-chain** (through the web app to the LP's
-   service), never on-chain. The salt reaches the verifier privately. **[confirm in M3, SPEC Q5]**
-3. LP pays the seller with a Paystack transfer using that reference, then calls
-   `claim_payout(order_id)` → OutLayer checks `GET /transfer/verify/:reference` **and** that the
-   transfer's recipient matches `recipient_commitment` (T23).
-   **[confirm in Test B]** test-mode mobile money transfers, transfer verify, recipient fields.
+2. Seller gives the LP service their number and salt **off-chain** (web app → LP service), never
+   on-chain.
+3. LP pays the seller with a pawaPay payout using the order's derived `payoutId` and the salt
+   metadata, then calls `claim_payout(order_id)` → the verifier checks the payout as above (T23).
+   Confirmed in Test B2 (M0.6b): sandbox payouts, status, recipient phone + provider.
 4. Outcomes:
    - Seller calls `confirm_received(order_id)` at any time → USDC to LP (`RELEASED`).
-   - Verdict `PAID` (transfer success, amount, currency, reference, recipient matches the
-     commitment, LP `key_fp` matches) → USDC to LP (`RELEASED`). Paying any other wallet, including
-     the LP's own, is NOT_PAID.
-   - `NOT_PAID` / `UNVERIFIABLE` → LP may retry until `payout_deadline + T_retry`
-     (`+ T_outage_max` if every failure was `OUTAGE`, so an honest LP who paid is not refunded
-     against during a provider outage); after that the seller can `refund(order_id)` → USDC back
-     to seller (`REFUNDED`). The LP controls the key and
-     the payout, so failure to prove the payout is the LP's risk.
+   - Verdict `PAID` (as defined above) → USDC to LP (`RELEASED`). Paying any other wallet,
+     including the LP's own, is NOT_PAID.
+   - `NOT_PAID` / `UNVERIFIABLE` / `PENDING` → LP may retry until `payout_deadline + T_retry`, or
+     `payout_deadline + T_outage_max` **instead** if every failure was `OUTAGE` (so an honest LP who
+     paid is not refunded against during a provider outage); after that the seller can
+     `refund(order_id)` → USDC back to seller (`REFUNDED`). The LP controls the key and the payout,
+     so failure to prove the payout is the LP's risk.
+   - Sell orders arrive through `ft_transfer_call`, which carries no NEAR, so the seller pre-pays
+     order storage with NEP-145 `storage_deposit` on the escrow (D-017).
 
 ## 6. Order states
 ```
@@ -156,12 +198,12 @@ BUY:  AWAITING_PAYMENT ─claim→ VERIFYING ─PAID→ RELEASED (or RELEASE_PEN
                  ↑                 │─NOT_PAID, before deadline+grace─┘(back)
                  │                 │─NOT_PAID, after → EXPIRED
                  │                 └─UNVERIFIABLE/err/timeout→ UNVERIFIED ─claim→ VERIFYING
-                 │                                              └─T_retry passed, slash→ SLASHED
+                 │                                              └─window (§4.5) passed, slash→ SLASHED
                  └─ no claim by deadline+grace, anyone calls expire → EXPIRED
 SELL: AWAITING_PAYOUT ─confirm_received→ RELEASED
                       ─claim_payout→ VERIFYING ─PAID→ RELEASED
                                                └─other→ AWAITING_PAYOUT
-                      ─deadline+T_retry passed, refund→ REFUNDED
+                      ─deadline+window (§4.5) passed, refund→ REFUNDED
 ```
 Terminal states: `RELEASED`, `EXPIRED`, `SLASHED`, `REFUNDED`. Only one verification may be in
 flight per order. A callback for a request that is not the order's current one is ignored.
@@ -173,7 +215,8 @@ flight per order. A callback for a request that is not the order's current one i
 | `T_grace` | extra time to claim after deadline | 15 min | 2 min |
 | `T_retry` | slash/refund window when a failure is the LP's fault (`LP_FAULT`) | 24 h | 3 min |
 | `T_outage_max` | slash/refund window when every failure is an outage (`OUTAGE`); hard limit | 72 h | 6 min |
-| `new_buyer_cap` | max USDC for an account's first N orders | 50 | 50 |
+| `new_buyer_cap` | max USDC per order for a new buyer (§4.1) | 50 | 50 |
+| `new_buyer_orders` | RELEASED buy orders after which a buyer is no longer new (1–100) | 3 | 3 |
 | `release_delay` | delay before release for new buyers (reversal protection) | 1 h | 0 |
 | `min_failed_attempts` | failed verifications needed (spread over the window) before a slash; 2–10 (1 could never span a window) | 3 | 2 |
 | `outlayer_call` | per verification: `fee` (yoctoNEAR deposit), `gas_tgas` (100–250), `callback_gas_tgas` (≥ 10; gas + callback ≤ 280), `max_instructions` (≤ 500e9), `max_memory_mb` (≤ 4096), `max_execution_seconds` (≤ 180) | fee from `estimate_execution_cost` | fee 0.01 NEAR, 200 + 30 TGas, 1e9 instr, 128 MB, 20 s |
@@ -192,12 +235,14 @@ permanent, the ceilings stop a deployment whose slash can never happen in practi
 ## 8. Invariants (each one gets a test)
 1. USDC is released only on a PAID verdict from the OutLayer callback for this order's current
    request (or on the seller's own `confirm_received` in a sell order).
-2. UNVERIFIABLE is never treated as NOT_PAID. After `T_retry`, a buy order slashes the LP bond to
-   the buyer; a sell order refunds the seller.
+2. UNVERIFIABLE and PENDING are never treated as NOT_PAID. After the slash/refund window (§4.5:
+   `T_retry` or `T_outage_max`), a buy order slashes the LP bond to the buyer; a sell order refunds
+   the seller.
 3. A payment reference settles at most one order.
 4. An LP with open orders cannot withdraw their bond or change `secret_ref`.
 5. `open_buy_notional ≤ bond` for every LP at all times.
-6. Contract USDC balance ≥ sum of all bonds + liquidity + locked sell funds + pending releases.
+6. Contract USDC balance ≥ sum of all bonds + liquidity + locked funds + pending releases +
+   claimable balances. "≥", not "=", because anyone can send stray tokens to the escrow.
 7. No phone number or API key is stored on-chain or written to logs.
 8. No account (including the deployer) can move user funds outside the state machine.
 9. The verifier source, accepted token, OutLayer contract and all parameters are fixed at init and
@@ -211,7 +256,8 @@ permanent, the ceilings stop a deployment whose slash can never happen in practi
     `min_failed_attempts` failures spanning `T_retry` (any `LP_FAULT` failure) or `T_outage_max`
     (only `OUTAGE` failures). No failure class ever releases USDC or skips the slash.
 12. A payment reference is unique across deployments (`opr-<deploy_tag>-<order_id>`).
-13. A sell order is PAID only if the transfer went to the recipient the seller committed to.
+13. A sell order is PAID only if the payout went to the recipient the seller committed to, and each
+    pawaPay `payoutId` settles at most one order.
 14. A paused LP gets no new orders; an LP's open USDC with new buyers never exceeds its
     `new_buyer_exposure_max`.
 
@@ -232,16 +278,15 @@ permanent, the ceilings stop a deployment whose slash can never happen in practi
 ## 10. Open questions (resolve in M0)
 - Q1 (ANSWERED in M0.4–M0.5, see PROGRESS.md): Exact OutLayer `request_execution` args, deposit, secret access control and callback format
   (Test A). Does the escrow contract or OutLayer own the yield? Mainnet OutLayer account id?
-- Q2 (ANSWERED, M0.6 + D-010): mobile money charge with a custom reference works in test mode.
-  Transfers to mobile money are BLOCKED on a Starter business account ("You cannot initiate third
-  party payouts as a starter business"); they need a Registered Business. Decision: the sell-flow
-  payout check is simulated in the demo (D-010).
+- Q2 (ANSWERED, M0.6, M0.6b, D-010, D-011): mobile money charge with a custom reference works in
+  Paystack test mode; Paystack transfers are blocked on a Starter account, so payouts run on the
+  pawaPay sandbox (Test B2 passed).
 - Q3: 1Click quote + withdraw of ~$1 USDC NEAR → Base, fees and time (Test C).
 - Q4: Escrow on testnet (mock USDC) with Intents shown separately on mainnet, or escrow on mainnet
   with tiny amounts so release → Intents runs end to end? Decide after Test A and C (DECISIONS.md).
-- Q5: How the sell-order `salt` (and the seller's number, if needed) reaches the verifier without
-  going on-chain: encrypted input, or a seller-owned OutLayer secret? (M3)
-- Q6: Can the verifier create the Paystack checkout (`checkout` mode) so the buyer gets the link
-  without the key leaving the TEE: on-chain call or OutLayer HTTPS API? (M2)
+- Q5 (ANSWERED, D-018): the salt travels inside the pawaPay payout as its only metadata field and
+  the verifier reads it from pawaPay (§5). Proven in the sandbox on Nov 3.
+- Q6 (ANSWERED, D-017): checkout runs through the escrow (`request_checkout`), because the LP's
+  secret is readable only via the escrow.
 - Q7: Can OutLayer compile the verifier from a GitHub commit, so anyone can check the wasm hash
   matches the source (reproducible build)? (M2)
