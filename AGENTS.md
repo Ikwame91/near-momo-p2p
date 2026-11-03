@@ -3,18 +3,19 @@
 ## Mission
 We are building **OpenRamp**: a trustless peer-to-peer on/off-ramp between mobile money and
 stablecoins (USDC) on NEAR. Anyone can be a liquidity provider; USDC is released only on proof of
-payment. First market for the demo: Ghana (MTN MoMo, Telecel Cash, AirtelTigo Money via Paystack);
+payment. First market for the demo: Ghana (MTN MoMo, Telecel Cash, AirtelTigo Money): Paystack test mode
+for collections, pawaPay sandbox for payouts (DECISIONS D-011);
 the payment provider is a plug-in so other countries/providers can be added. Built for the NEAR
 Hackathon (build Nov 1–14, 2026; submit by Nov 14 23:59 UTC). Rules: https://nearhackathon.com/HACKATHON.md
-Tracks: Real-World Money `realworld` (main), Agent Economy `agents` (secondary). Privacy `privacy`
-only if we actually build something for it.
+Track: Real-World Money `realworld`. (`agents` dropped: no real agent feature, D-010, D-017.) Privacy
+`privacy` only if we actually build something for it.
 Owner: Kwame (all modules) for now.
 
 ## Architecture (do not change without a DECISIONS.md entry)
 - `contracts/escrow`: NEAR smart contract (Rust, near-sdk). Holds USDC, manages orders, LP bonds,
   timeouts, bond slashing. Uses yield/resume to wait for the OutLayer verification result.
 - `verifier/`: OutLayer program. Checks a mobile money payment via the payment provider API
-  (Paystack TEST MODE only) inside the TEE. The verdict returns to the escrow contract through
+  (Paystack test mode for collections, pawaPay sandbox for payouts; never live) inside the TEE. The verdict returns to the escrow contract through
   OutLayer's yield/resume callback; there is no separate signature to check unless OutLayer's docs
   show one (confirm in Test A). Provider is a plug-in behind an interface, so it can be swapped
   for a licensed partner.
@@ -49,6 +50,7 @@ Owner: Kwame (all modules) for now.
 - If stuck after 2 attempts on the same error: stop, write what you tried in PROGRESS.md, and ask.
 
 ## Money and security invariants (must always hold)
+SPEC.md §8 is the full, canonical list; this is a summary.
 - USDC is released only on a PAID verdict that arrives through the OutLayer callback for THIS
   order ID. Verdicts from any other caller or for any other order are rejected.
 - "Could not verify" is NEVER treated as "not paid". After a retry window for real outages, a
@@ -67,8 +69,9 @@ Code + tests passing + PLAN.md ticked + PROGRESS.md entry + commit + push.
 
 ## Git
 - Push freely to this repo's working branches with clear commit messages.
-- Ask before: merging to `main` from a feature branch with unreviewed money logic, making the repo
-  public, or submitting.
+- Ask before: merging to `main` from a feature branch with unreviewed money logic, or submitting.
+  The repo is public (D-008): never commit secrets.
+- No Claude co-author or session trailers in commit messages.
 
 ## Never
 - Never delete or rewrite tests to make them pass.

@@ -9,6 +9,50 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-03 — Session 3: design decisions before M1.4 + Q5 sandbox proof (docs only)
+Branch: `docs/design-decisions-before-m1-4` (from main after PR #7).
+Q5 proof (`python3 scripts/test-b/pawapay_metadata_probe.py`, raw output, phone masked):
+```
+SENT salt: 786047a809a212f7ea28d81221aac3d7a2b14c2b30d9a96aae611113d5e67475
+INITIATE 200 {"payoutId":"887bab2b-7ee9-4b75-8b4c-c3f70331daef","status":"ACCEPTED","created":"2026-11-03T19:32:53Z"}
+STATUS 200 RAW (phone masked):
+{
+  "data": {
+    "payoutId": "887bab2b-7ee9-4b75-8b4c-c3f70331daef",
+    "status": "COMPLETED",
+    "amount": "5.00",
+    "currency": "GHS",
+    "country": "GHA",
+    "recipient": {
+      "type": "MMO",
+      "accountDetails": {
+        "phoneNumber": "*********789",
+        "provider": "MTN_MOMO_GHA"
+      }
+    },
+    "customerMessage": "nearmomop2p",
+    "created": "2026-11-03T19:32:53Z",
+    "providerTransactionId": "5c2b2588-4c8d-44c4-bb47-5ede8b52ad9d",
+    "metadata": {
+      "openrampSalt": "786047a809a212f7ea28d81221aac3d7a2b14c2b30d9a96aae611113d5e67475"
+    }
+  },
+  "status": "FOUND"
+}
+salt returned in clear and identical: True
+```
+Note: metadata is a LIST in the request but an OBJECT in the reply, and `isPII` is not echoed.
+Done (docs, Kwame agreed): D-017 (pending = outage up to T_outage_max, one provider per LP,
+checkout via escrow, ceil rounding, new-buyer definition, claimable balances, NEP-145 for sell
+storage, 401-only LP_FAULT, agents track dropped, inv. 6 is ≥), D-018 (Q5 design + evidence).
+SPEC v0.4 (§2, §3.1, §4.1–4.5, §5 recipient commitment rules 1–5, §6, §7 `new_buyer_orders`,
+inv. 2/6/13, Q2/Q5/Q6 answered, stale Paystack-transfer text replaced). THREAT_MODEL T5/T23/T25
+updated, T35/T36 added. PLAN: [must]/[nice] labels; M1.3 starts with NEP-297 events + provider
+limit; M1.4/M1.5/M1.7/M2.1b updated; new M2.2b, M2.8, M2.9, M3.0, M3.4; M5.3/M5.5. AGENTS.md +
+CLAUDE.md: approved diff applied (identical files).
+Failed / blocked: none. No contract code changed.
+Next: M1.3 (events + provider limit first).
+
 ## 2026-11-03 — Session 3: PR #7 fix-up after 3-reviewer review (D-016)
 Done:
 - `update_quote` requires 1 yocto (T34). `on_withdraw` checks predecessor in its body.

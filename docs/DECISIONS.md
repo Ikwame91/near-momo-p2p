@@ -14,7 +14,7 @@ Status: accepted
 Context: FeeRail (diaspora school fees) scored 21/25 but had low originality and no live schools.
 Decision: Build a P2P on/off-ramp where an OutLayer TEE verifies mobile money payments and a NEAR
 escrow releases USDC. Cash-out is the main crypto pain in Africa; fits Real-World Money and Agent Economy.
-Alternatives: FeeRail; MoMo-for-agents via x402 (kept as stretch S1); AI Bursar.
+Alternatives: FeeRail; MoMo-for-agents via x402 (kept as stretch S1, later dropped in D-010); AI Bursar.
 
 ## D-002 Paystack test mode behind a provider interface (Oct 2026)
 Status: accepted
@@ -79,7 +79,7 @@ Alternatives: on-chain recipient number (rejected: privacy); Paystack integratio
 key fingerprint (rejected: not in the verify response, checked 2026-11-01).
 
 ## D-010 Buy flow is the main demo; sell-flow payout check is simulated (Nov 1, 2026)
-Status: accepted (Kwame, option 3)
+Status: accepted (Kwame, option 3); payouts UPDATED by D-011 (pawaPay sandbox)
 Context: Test B (M0.6) showed a Paystack Starter business cannot send transfers, even in test
 mode ("You cannot initiate third party payouts as a starter business"); a Registered Business
 upgrade needs business papers and may take days. The buy flow only receives payments, which work.
@@ -203,3 +203,40 @@ Decisions, each for its own reason:
   ~3e29 mints, so no account deny-list is needed.
 Alternatives: a setter for gas (rejected: re-introduces an owner); unbounded settings (rejected:
 permanent mistakes).
+
+## D-017 Design decisions before M1.4 (Nov 3, 2026)
+Status: accepted (Kwame "agree" on items 1–6 of the three-reviewer review)
+1. Pending payments are `PENDING` = `OUTAGE` class, never NOT_PAID: Paystack `pending`, `ongoing`,
+   `processing`, `queued`, `send_otp`, `pay_offline`; pawaPay `ACCEPTED`, `ENQUEUED`, `PROCESSING`.
+   They end at the same hard limit `T_outage_max`, so nobody can stall an order forever (T35, T36).
+   Only failed / abandoned / reversed / not found are NOT_PAID.
+2. One provider per LP: `"paystack"` (buy side) or `"pawapay"` (sell side). One verifier wasm
+   dispatches on the provider; `key_fp` covers either key. The demo uses two LP accounts.
+3. Checkout runs through the escrow (`request_checkout(order_id)`, contract-set fee), forced to
+   GHS + `channels: ["mobile_money"]` (no cards, no chargebacks) + a synthetic email. The LP's
+   secret is readable only via the escrow, so no other path works without loosening T19.
+4. Rules the SPEC left open: `ghs_amount = ceil(usdc × rate / 1e6)` (round up, protects the LP),
+   > 0 and ≤ u64; a buyer is new while they have fewer than `new_buyer_orders` RELEASED buy orders,
+   cap per order; failed USDC transfers (release, slash, refund) go to a claimable balance anyone
+   can retry; sell orders pre-pay storage with NEP-145 `storage_deposit`.
+5. Only HTTP 401 is `LP_FAULT` (invalid key); 403 (WAF / outage) and unknown reasons are `OUTAGE`.
+6. The `agents` track is dropped: a retry script is not an agent, and overselling it would hurt
+   credibility. Focus on `realworld`.
+Also: the books check (inv. 6, M1.7) is balance ≥ owed, not =, because anyone can send stray
+mock USDC to the escrow. NEP-297 events and the provider limit come first in M1.3.
+
+## D-018 Sell-order recipient commitment via pawaPay metadata (Q5) (Nov 3, 2026)
+Status: accepted (Kwame, conditional on the sandbox proof, which passed)
+Context: an unsalted or public-salt hash of a Ghana phone number (~3e9 candidates) is cracked in
+seconds, so the salt must never be on-chain, but the TEE needs it to check the commitment.
+Decision (SPEC §5): `recipient_commitment = sha256("openramp-sell-v1|" + salt + "|" + number + "|"
++ provider)`, salt 64 lowercase hex (fresh per order), number E.164 digits only, provider = pawaPay
+code. The seller gives number + salt to the LP privately; the LP attaches the salt as the payout's
+only metadata field (`openrampSalt`, `isPII: true`); the verifier reads it back from pawaPay with the
+LP's key, requires COMPLETED, amount, the order's derived payoutId and exactly one valid metadata
+field, and recomputes the hash from pawaPay's recipient phone + provider. The contract marks each
+payoutId used. pawaPay and the LP see the salt; acceptable because both already know the number.
+Evidence: sandbox payout 887bab2b-7ee9-4b75-8b4c-c3f70331daef, status reply
+`"metadata": {"openrampSalt": "786047a8…67475"}`, identical to the salt sent (PROGRESS Nov 3).
+Alternatives: salt as OutLayer input (rejected: on-chain, brute-forceable); per-order OutLayer
+secret written by the LP (works, heavier; fallback if pawaPay metadata ever changes).

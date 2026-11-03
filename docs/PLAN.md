@@ -38,15 +38,24 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 ## M1 Escrow core (Nov 3–6): contract logic with unit tests, no OutLayer yet
 - [x] M1.1 Scaffold `contracts/escrow` (near-sdk, cargo-near), mock USDC FT for tests. Check: build + empty test passes.
 - [x] M1.2 LP registration, bond and liquidity deposits via `ft_transfer_call`, withdrawals. Check: tests.
-- [ ] M1.3 Bond/secret lock while orders open (inv. 4), bond rule (inv. 5), `pause_lp` (inv. 14). Check: failing→passing tests.
-- [ ] M1.4 Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), new-buyer cap + per-LP
-      exposure cap (inv. 14). Check: tests.
-- [ ] M1.5 Verdict handling behind a `Verifier` trait with a mock: PAID/NOT_PAID/UNVERIFIABLE paths,
-      replay protection, reference + `key_fp` must match (inv. 1–3, 10). Check: tests.
+Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 scope review).
+- [ ] M1.3 [must] (first) NEP-297 events for LP actions (register, deposit, withdraw, quote change)
+      with no PII; provider limited to `"paystack" | "pawapay"` (D-017). Then bond/secret lock while
+      orders open (inv. 4), bond rule (inv. 5), `pause_lp` / `resume_lp` with 1 yocto (inv. 14,
+      T34). Check: failing→passing tests.
+- [ ] M1.4 [must] Buy order open/expire, `opr-<deploy_tag>-<id>` references (inv. 12), paystack LP
+      only, `key_fp` must be set, `ghs_amount` = ceil formula, new-buyer counter (`new_buyer_orders`)
+      + per-order cap + per-LP exposure cap (inv. 14), order views `get_order` / `list_orders_by_lp`
+      / `list_orders_by_buyer` (the web app needs them). Check: tests.
+- [ ] M1.5 [must] Verdict handling behind a `Verifier` trait with a mock: PAID / NOT_PAID /
+      UNVERIFIABLE / PENDING, replay protection, reference + `key_fp` must match, callback carries
+      (order_id, attempt) and stale ones are ignored (inv. 1–3, 10, T15), `finalize_release`,
+      claimable balances for failed transfers + `withdraw_claimable` (D-017). Check: tests.
 - [ ] M1.6 Retry window + slash with `min_failed_attempts`, failure classes `LP_FAULT` (`T_retry`) /
       `OUTAGE` (`T_outage_max`), contract-set OutLayer deposit/limits (T5, T8, T25, T30, T31,
       inv. 11, D-012). Check: tests with time travel.
-- [ ] M1.7 Balance accounting invariant (inv. 6) checked after every test. Check: tests.
+- [ ] M1.7 [must] Balance accounting invariant (inv. 6) checked after every test: contract balance
+      ≥ owed (not =; stray mUSDC can be sent to the escrow). Check: tests.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
 - [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Also
@@ -58,26 +67,41 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
       verdict logic + 15 tests): `PaymentProvider` trait, Paystack adapter, verdict mapping, unit tests
       with recorded test-mode responses. Check: tests.
-- [ ] M2.1b Verifier modes: `fingerprint` (returns `key_fp`), `checkout` (creates the Paystack
-      checkout with the LP key, SPEC Q6), `verify` output carries `key_fp`. Check: tests + testnet run.
+- [ ] M2.1b [must] Verifier modes: `fingerprint` (returns `key_fp`, either provider), `checkout`
+      (Paystack initialize: GHS, mobile_money only, synthetic email), `verify` output carries
+      `key_fp`; `pending` reason; only 401 = `auth_error`, 403 and unknown = outage (D-017).
+      Check: tests + testnet run.
+- [ ] M2.2b [must] Escrow `request_checkout(order_id)` → checkout mode → callback stores
+      `authorization_url` (D-017). Check: tests + testnet run.
 - [ ] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
 - [ ] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
 - [ ] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
 - [ ] M2.6 Reproducible verifier build (rust-toolchain.toml; OutLayer GitHub compile if possible,
       SPEC Q7). Check: a second build gives the same sha256.
-- [ ] M2.7 Deploy the escrow from a reproducible build, with deploy + `new` in ONE batched transaction
+- [ ] M2.8 [must] `scripts/deploy.sh` (mock-ft, storage registrations, mint, batched deploy + `new`,
+      delete key) and `scripts/lp-setup.sh` (store secret `--via` escrow, register LP). Testnet
+      deploys before M3 are throwaway; the final reproducible deploy comes after M3.1, because the
+      verifier must already include pawaPay and cannot change later. Check: fresh run works.
+- [ ] M2.9 [nice] GitHub Actions: `cargo test` + `cargo near build reproducible-wasm` (avoids the
+      Docker Hub rate limit, gives judges CI evidence). Check: green run.
+- [ ] M2.7 [must] Deploy the escrow from a reproducible build, with deploy + `new` in ONE batched transaction
       signed by the contract account (T32); then remove its full-access key, or document upgrade
       trust (inv. 9).
 - [ ] M2.5 Hostile review (PROMPTS.md §8) of contract + verifier; fix findings with tests.
 
 ## M3 Sell flow + settlement (Nov 8–10)
-- [ ] M3.1 Sell order: lock, recipient commitment with canonical `233…` numbers (inv. 13, SPEC Q5),
+- [ ] M3.0 [must] `scripts/lp-service` (minimal script, not a product): receives the seller's number
+      + salt, sends the pawaPay payout with the salt metadata, calls `claim_payout`. Check: run.
+- [ ] M3.1 [must] Sell order: NEP-145 storage pre-payment, JSON `open_sell` msg, pawapay LP only,
+      recipient commitment per SPEC §5 / D-018 (inv. 13), payoutId used once,
       UUID payout ids, `confirm_received`, `claim_payout` with pawaPay status + recipient check,
       refund with outage extension. Payout check via `PaymentProvider`: pawaPay sandbox (D-011),
       `SimulatedPayout` fallback in a separate labelled build (D-010). Check: tests.
 - [ ] M3.2 Testnet end-to-end sell with pawaPay sandbox payouts (fallback: simulated, labelled).
       Check: script + tx links.
-- [ ] M3.3 `settlement/`: withdraw released USDC to Base via 1Click (per D on SPEC Q4). Check: tx links.
+- [ ] M3.4 [nice] Keeper: a ~30-line script that re-checks UNVERIFIED orders during an outage
+      (T31). The outage demo can use manual re-checks instead. Check: run.
+- [ ] M3.3 [nice] `settlement/`: withdraw released USDC to Base via 1Click (per D on SPEC Q4). Check: tx links.
 
 ## M4 Web demo (Nov 9–11)
 - [ ] M4.1 `web/` scaffold with NEAR wallet login. Check: runs locally.
@@ -88,7 +112,7 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
       (likely the labelled simulated provider returning `server_error`). Check: recorded run.
 - [ ] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
 - [ ] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
-- [ ] M4.4 Seller screen. Check: manual run.
+- [ ] M4.4 [nice] Seller screen (the CLI + lp-service script with tx links can show the sell flow). Check: manual run.
 - [ ] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.
 
 ## Stretch (only if M2 is done by Nov 9)
@@ -100,6 +124,8 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
       limit and its residual risk (D-012), production = licensed LPs + Act 1154,
       libraries/AI code used, licensing note (Act 1154), limitations.
 - [ ] M5.2 Fresh clone → setup → demo from scratch; fix breakages.
-- [ ] M5.3 Secret scan of git history; add LICENSE check; make repo public [K approves].
+- [ ] M5.3 Secret scan of git history (repo is already public, D-008: also scan now and before every
+      merge); LICENSE check.
 - [ ] M5.4 Demo video (2 min) + X post tagging @NEARProtocol #NEARHackathon [K posts].
-- [ ] M5.5 Submit: name, tracks (`realworld`, `agents`), mainnet payout account, repo, post link [K approves].
+- [ ] M5.5 Submit: name, track `realworld` (`agents` dropped, D-017), mainnet payout account, repo,
+      post link [K approves].
