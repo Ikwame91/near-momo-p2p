@@ -10,11 +10,20 @@ use crate::{Escrow, EscrowExt};
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use near_sdk::{
-    assert_one_yocto, env, near, require, AccountId, Gas, NearToken, Promise, PromiseError, PromiseOrValue,
+    assert_one_yocto, env, near, require, AccountId, Gas, GasWeight, NearToken, Promise, PromiseError,
+    PromiseOrValue,
 };
 
-const FT_TRANSFER_GAS: Gas = Gas::from_tgas(10);
-const WITHDRAW_CALLBACK_GAS: Gas = Gas::from_tgas(10);
+/// Minimum gas for the token's `ft_transfer`. It also receives ALL unused prepaid gas (weight 1),
+/// so if a token (e.g. native USDC) ever needs more, the LP fixes it by attaching more gas; with
+/// no owner and no setter, a fixed cap could block withdrawals forever.
+pub(crate) const FT_TRANSFER_MIN_GAS: Gas = Gas::from_tgas(20);
+/// Fixed budget for `on_withdraw` (weight 0, so it never competes with `ft_transfer`). Must stay
+/// well above the callback's real cost (measure in the M1.8 sandbox).
+pub(crate) const WITHDRAW_CALLBACK_GAS: Gas = Gas::from_tgas(15);
+/// `key_fp` is written later by the fingerprint callback (M1.5/M2), but its storage is charged at
+/// registration: borsh `Some(String)` of 64 hex chars = 1 + 4 + 64 bytes more than `None`.
+pub(crate) const KEY_FP_EXTRA_BYTES: u64 = 68;
 
 /// Names the OutLayer secret that holds the LP's provider key (never the key itself, inv. 7).
 #[near(serializers = [json, borsh])]
@@ -49,6 +58,9 @@ pub struct Lp {
     pub locked: U128,
     pub open_orders: u32,
     pub paused: bool,
+    /// sha256 of the LP's provider key, hex; set by the TEE fingerprint run. No orders until set
+    /// (SPEC §3.1, T24).
+    pub key_fp: Option<String>,
 }
 
 #[near(serializers = [json])]
@@ -81,10 +93,21 @@ impl Escrow {
         let zero = U128(0);
         self.lps.insert(
             lp_id.clone(),
-            Lp { provider, secret_ref, quote, bond: zero, liquidity: zero, locked: zero, open_orders: 0, paused: false },
+            Lp {
+                provider,
+                secret_ref,
+                quote,
+                bond: zero,
+                liquidity: zero,
+                locked: zero,
+                open_orders: 0,
+                paused: false,
+                key_fp: None,
+            },
         );
         self.lps.flush();
-        let cost = env::storage_byte_cost().saturating_mul((env::storage_usage() - before) as u128);
+        let bytes = env::storage_usage() - before + KEY_FP_EXTRA_BYTES;
+        let cost = env::storage_byte_cost().saturating_mul(bytes as u128);
         let attached = env::attached_deposit();
         require!(attached >= cost, format!("attach at least {} yoctoNEAR for storage", cost.as_yoctonear()));
         let refund = attached.saturating_sub(cost);
@@ -93,12 +116,17 @@ impl Escrow {
         }
     }
 
-    /// Change the quote; applies to new orders only.
+    /// Change the quote; applies to new orders only. Requires exactly 1 yoctoNEAR: a leaked
+    /// function-call key (e.g. from the web app) must not be able to reprice the LP's book.
+    #[payable]
     pub fn update_quote(&mut self, quote: Quote) {
+        assert_one_yocto();
         validate_quote(&quote);
-        let mut lp = self.lp_or_panic(&env::predecessor_account_id());
-        lp.quote = quote;
-        self.lps.insert(env::predecessor_account_id(), lp);
+        let id = env::predecessor_account_id();
+        match self.lps.get_mut(&id) {
+            Some(lp) => lp.quote = quote,
+            None => env::panic_str("not a registered LP"),
+        }
     }
 
     /// NEP-141 receiver. Only the configured token may call it (inv. 9, T26).
@@ -133,9 +161,18 @@ impl Escrow {
         self.withdraw(Pot::Bond, amount.0)
     }
 
-    /// Callback after the token transfer of a withdrawal: re-credit if it failed.
+    /// Callback after the token transfer of a withdrawal: re-credit if it failed. The caller
+    /// check is explicit (not only `#[private]`, which unit tests cannot see). The LP record must
+    /// never be removed while a withdrawal is in flight, or a failed transfer could not be re-credited.
     #[private]
-    pub fn on_withdraw(&mut self, lp_id: AccountId, pot: Pot, amount: U128, #[callback_result] result: Result<(), PromiseError>) -> bool {
+    pub fn on_withdraw(
+        &mut self,
+        lp_id: AccountId,
+        pot: Pot,
+        amount: U128,
+        #[callback_result] result: Result<(), PromiseError>,
+    ) -> bool {
+        require!(env::predecessor_account_id() == env::current_account_id(), "only the contract itself");
         if result.is_ok() {
             return true;
         }
@@ -178,17 +215,19 @@ impl Escrow {
         field.0 -= amount;
         self.lps.insert(lp_id.clone(), lp);
         Promise::new(self.token.clone())
-            .function_call(
+            .function_call_weight(
                 "ft_transfer".to_string(),
                 json!({ "receiver_id": lp_id, "amount": U128(amount), "memo": "openramp withdraw" })
                     .to_string()
                     .into_bytes(),
                 NearToken::from_yoctonear(1),
-                FT_TRANSFER_GAS,
+                FT_TRANSFER_MIN_GAS,
+                GasWeight(1),
             )
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(WITHDRAW_CALLBACK_GAS)
+                    .with_unused_gas_weight(0)
                     .on_withdraw(lp_id, pot, U128(amount)),
             )
     }

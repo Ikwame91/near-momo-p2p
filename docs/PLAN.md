@@ -49,7 +49,10 @@ Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
 - [ ] M1.7 Balance accounting invariant (inv. 6) checked after every test. Check: tests.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
-- [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Check: passes.
+- [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Also
+      prove what unit tests cannot: `#[private]` callbacks reject strangers, double init rejected,
+      NEP-141 refund on a rejected deposit, failed withdrawal (receiver unregistered) is re-credited,
+      and record real gas burnt for ft_transfer / on_withdraw (D-016). Check: passes.
 
 ## M2 Verifier + real wiring (Nov 6–8)
 - [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the

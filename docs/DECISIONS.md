@@ -180,3 +180,26 @@ repo root. Both contracts carry `[package.metadata.near.reproducible_build]` wit
 committed tree; local non-reproducible hashes are labelled as such.
 Alternatives: pin only in the README (not enforced); skip reproducibility (judges cannot check that
 deployed code matches the source).
+
+## D-016 PR #7 review fix-ups: gas weighting, settings ceilings, 2+ failed attempts (Nov 3, 2026)
+Status: accepted (Kwame: "go" on the fix-up)
+Context: three read-only reviewers (security, docs-vs-code, contract code) checked the project.
+Decisions, each for its own reason:
+- Withdrawals: `ft_transfer` gets a 20 TGas minimum plus ALL unused gas (weight 1); `on_withdraw`
+  gets a fixed 15 TGas (weight 0). With no owner and no setter, a fixed transfer budget that a
+  token (e.g. native USDC) outgrows would block LP withdrawals forever; this way the LP can attach
+  more gas. Measure real costs in the M1.8 sandbox.
+- `update_quote` (and every future LP setting: pause/resume, secret change) requires 1 yoctoNEAR,
+  so a leaked function-call key from the web app cannot reprice an LP's book (T34).
+- Every callback checks `predecessor == current_account` in its body (as `new` does), because
+  `#[private]` is invisible to unit tests.
+- `min_failed_attempts` must be 2–10: with 1, "first and last failure a window apart" is never
+  true, so a slash would be impossible. SPEC §7's 250 TGas cap on the OutLayer call is enforced.
+- Ceilings on timing and fee (SPEC §7): settings are permanent, so a deployment with a 100-year
+  outage window (no slash ever) must be impossible.
+- `Lp.key_fp: Option<String>` exists now; its storage (68 bytes) is charged at registration, so the
+  later fingerprint write does not drain the contract's own NEAR.
+- Mock USDC: 1,000 mUSDC per mint. A per-mint cap alone makes the overflow-griefing attacks need
+  ~3e29 mints, so no account deny-list is needed.
+Alternatives: a setter for gas (rejected: re-introduces an owner); unbounded settings (rejected:
+permanent mistakes).
