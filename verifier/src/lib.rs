@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 pub const VERIFY_URL: &str = "https://api.paystack.co/transaction/verify/";
 pub const INITIALIZE_URL: &str = "https://api.paystack.co/transaction/initialize";
 /// Synthetic email: Paystack requires one; it is not the buyer's (no PII, inv. 7).
-pub const CHECKOUT_EMAIL: &str = "buyer@openramp.example";
+pub const CHECKOUT_EMAIL: &str = "buyer@example.com";
 /// The escrow stores checkout URLs up to this length (contract MAX_CHECKOUT_URL).
 pub const MAX_CHECKOUT_URL: usize = 256;
 
@@ -221,6 +221,13 @@ mod tests {
     use super::*;
 
     const REF: &str = "opr-1a2b3c4d-7";
+
+    /// Paystack's initialize rejects `.example` addresses (400 invalid_email_address, probe Nov 4);
+    /// `example.com` (reserved by RFC 2606, no real inbox) is accepted.
+    #[test]
+    fn checkout_email_is_one_paystack_accepts() {
+        assert_eq!(CHECKOUT_EMAIL, "buyer@example.com");
+    }
     const PAID_AT: &str = "2026-11-01T20:48:20.000Z";
     const PAID_AT_UNIX: u64 = 1_793_566_100;
     const FP: &str = "ff";

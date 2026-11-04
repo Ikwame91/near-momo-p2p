@@ -6,6 +6,7 @@
 #   open <lp> <usdc_units>   open_buy_order (storage deposit attached, excess refunded)
 #   checkout <order_id>      TEE creates the Paystack checkout with the LP's key
 #   claim <order_id>         TEE checks the payment; verdict arrives in the OutLayer callback
+#   expire <order_id>        expire an unpaid order after pay_deadline + t_grace (frees the LP's USDC)
 #   withdraw                 pay the buyer's claimable mUSDC out
 #   order <order_id>         view the order;  claimable  view the buyer's claimable
 # Needs: NEAR_ACCOUNT_ID (parent), NEAR_PRIVATE_KEY (the buyer is a sub-account with the same key).
@@ -35,6 +36,7 @@ case "$STEP" in
   open) call open_buy_order "{\"lp\":\"${3:?lp}\",\"usdc_amount\":\"${4:?usdc units}\"}" '0.1 NEAR' '30 Tgas' ;;
   checkout) call request_checkout "{\"order_id\":${3:?order id}}" '0.05 NEAR' '300 Tgas' ;;
   claim) call claim "{\"order_id\":${3:?order id}}" '0.05 NEAR' '300 Tgas' ;;
+  expire) call expire_order "{\"order_id\":${3:?order id}}" '0 NEAR' '30 Tgas' ;;
   withdraw) call withdraw_claimable "{\"account\":\"$BUYER\"}" '0 NEAR' '100 Tgas' ;;
   order) view get_order "{\"order_id\":${3:?order id}}" ;;
   claimable) view get_claimable "{\"account\":\"$BUYER\"}" ;;
