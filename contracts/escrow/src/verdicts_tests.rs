@@ -627,9 +627,10 @@ fn not_paid_resets_the_whole_streak() {
 
 #[test]
 fn pending_after_the_deadline_stays_unverified_never_expired() {
-    // T35: a charge still pending after deadline + grace must not expire the order.
+    // T35: a charge still pending after deadline + grace must not expire the order. Both failures
+    // are within the 6-min demo outage window (12 min apart would correctly slash, see M1.6 tests).
     let mut e = with_order();
-    { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, T0 + MIN, r) };
+    { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, DEADLINE, r) };
     { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, LAST_CLAIM + 1, r) };
     let o = e.get_order(0).unwrap();
     assert_eq!((o.state, o.failures), (OrderState::Unverified, 2));

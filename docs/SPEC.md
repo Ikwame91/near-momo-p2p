@@ -165,10 +165,13 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
      fail with `null` (by deleting or locking its secret), but that only buys time up to
      `T_outage_max`. Anyone (including the LP) may `claim` again at any time; a PAID result
      releases and a NOT_PAID result after the deadline expires the order, ending the streak.
-     Anyone may call `slash(order_id)` only when the order is still `UNVERIFIED` **and** it has
-     at least `min_failed_attempts` failed results, the first and last at least the window apart.
-     The buyer receives `usdc_amount` from the LP's bond, the locked liquidity is unlocked back to
-     the LP. State `SLASHED`.
+     The slash happens **automatically in the same step** that records the failure which makes it
+     due (inside the verdict callback, or the stuck-timeout re-claim), so an LP cannot dodge it by
+     racing to re-claim; `slash(order_id)` is a public backstop. Due = the order is `UNVERIFIED`
+     **and** has at least `min_failed_attempts` failed results, the first and last at least the
+     window apart (measured on failure times). In one step the order's lock closes back to the LP's
+     liquidity and the same amount is taken from the bond (`locked ≤ bond` keeps holding); the
+     buyer's claimable balance gets `usdc_amount`. State `SLASHED`; event `order_slashed`.
 6. Optional: buyer withdraws released USDC to another chain via `settlement/` (1Click).
 
 ## 5. Sell flow (USDC → cedis), two-step

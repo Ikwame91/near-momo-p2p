@@ -59,8 +59,9 @@ impl Escrow {
     /// Start a verification (SPEC §4.3). Anyone may call it (the buyer, the LP, a keeper):
     /// AWAITING_PAYMENT until `last_claim` (inclusive; `expire_order` is strictly after),
     /// UNVERIFIED at any time (a re-check), or VERIFYING after `VERIFY_TIMEOUT_NS` with no verdict
-    /// (counted as an outage failure). Returns the new attempt number, which the verdict must
-    /// carry. M2.2 adds the OutLayer call and the contract-set fee.
+    /// (counted as an outage failure; if that completes the slash window the order is slashed and
+    /// 0 is returned). Returns the new attempt number, which the verdict must carry. M2.2 adds the
+    /// OutLayer call and the contract-set fee.
     pub fn claim(&mut self, order_id: u64) -> u32 {
         let now = env::block_timestamp();
         let grace = self.params.t_grace_ns;
@@ -82,6 +83,17 @@ impl Escrow {
                     lp_fault: order.lp_fault,
                 }
                 .emit();
+                // The missing answer may complete the slash window: slash instead of re-verifying.
+                if self.slash_if_due(order_id) {
+                    return 0;
+                }
+                let order = self.orders.get_mut(&order_id).expect("order exists");
+                order.state = OrderState::Verifying;
+                order.attempt = order.attempt.checked_add(1).unwrap_or_else(|| env::panic_str("overflow"));
+                order.claimed_at = Some(U64(now));
+                let attempt = order.attempt;
+                Event::OrderVerifying { order_id, attempt }.emit();
+                return attempt;
             }
             _ => env::panic_str("order cannot be claimed in its current state"),
         }
@@ -177,10 +189,45 @@ impl Escrow {
             Outcome::Failure { lp_fault } => {
                 record_failure(order, now, lp_fault);
                 Event::OrderUnverified { order_id, attempt, failures: order.failures, lp_fault: order.lp_fault }.emit();
+                // Slash here, in the same step, as soon as the window is met: otherwise an LP could
+                // dodge a due slash by racing to re-claim (PR #11 review).
+                self.slash_if_due(order_id);
             }
         }
         true
     }
+
+    /// Slash a buy order if its unverified streak meets the window (SPEC §4.5, D-012): at least
+    /// `min_failed_attempts` failures, the first and last at least `t_retry` apart (any LP_FAULT) or
+    /// `t_outage_max` apart (outages only). The buyer gets `usdc_amount` from the LP's bond, as a
+    /// claimable balance (no promise, D-021); the locked liquidity goes back to the LP. Returns
+    /// whether it slashed. Measured on failure times, so only a recorded failure can make it due.
+    pub(crate) fn slash_if_due(&mut self, order_id: u64) -> bool {
+        let (min_failures, t_retry, t_outage) =
+            (self.params.min_failed_attempts, self.params.t_retry_ns, self.params.t_outage_max_ns);
+        let order = self.orders.get_mut(&order_id).expect("order exists");
+        if !slash_due(order, min_failures, t_retry, t_outage) {
+            return false;
+        }
+        order.state = OrderState::Slashed;
+        let (lp, buyer, amount, new_buyer, lp_fault) =
+            (order.lp.clone(), order.buyer.clone(), order.usdc_amount.0, order.new_buyer, order.lp_fault);
+        self.slash_lp(&lp, amount, new_buyer);
+        let cur = self.claimable.get(&buyer).copied().unwrap_or(0);
+        self.claimable.insert(buyer.clone(), cur.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow")));
+        Event::OrderSlashed { order_id, lp, buyer, amount: U128(amount), lp_fault }.emit();
+        true
+    }
+}
+
+/// The slash rule (D-012). Pure, so it is easy to test and to reason about.
+pub fn slash_due(order: &crate::Order, min_failures: u8, t_retry: u64, t_outage: u64) -> bool {
+    if order.state != OrderState::Unverified || order.failures < min_failures {
+        return false;
+    }
+    let (Some(first), Some(last)) = (order.first_failure_at, order.last_failure_at) else { return false };
+    let window = if order.lp_fault { t_retry } else { t_outage };
+    last.0.saturating_sub(first.0) >= window
 }
 
 /// Count one failed verification (UNVERIFIED): failures++, first time kept, last time updated,
@@ -197,6 +244,13 @@ fn record_failure(order: &mut crate::Order, now: u64, lp_fault: bool) {
 
 #[near]
 impl Escrow {
+    /// Slash an UNVERIFIED order whose window is met (normally this already happened inside the
+    /// verdict step; this is the backstop). Anyone may call it.
+    pub fn slash(&mut self, order_id: u64) {
+        require!(self.orders.get(&order_id).is_some(), "no such order");
+        require!(self.slash_if_due(order_id), "slash conditions not met");
+    }
+
     /// Release a RELEASE_PENDING order once `release_at` has passed. Anyone may call it.
     pub fn finalize_release(&mut self, order_id: u64) {
         let order = self.orders.get(&order_id).unwrap_or_else(|| env::panic_str("no such order"));
