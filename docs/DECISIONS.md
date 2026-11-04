@@ -249,3 +249,23 @@ subagents (security + code/test), fixes their findings with tests, re-runs every
 GitHub checks, then merges. Kwame reviews afterwards. This replaces the AGENTS.md "ask before
 merging unreviewed money logic" rule in practice; the AGENTS.md wording should be updated with
 Kwame's approval of the diff.
+
+## D-020 Buy-order storage, indexes and new-buyer history (PR #10 review) (Nov 4, 2026)
+Status: accepted (reviewer findings, each fixed for its own reason)
+- New-buyer status is counted per (lp, buyer), not globally: otherwise an attacker's own LP could
+  release 3 penny orders to a fresh account and make it "experienced" for every honest LP,
+  bypassing the new-buyer cap, exposure limit and release delay (T6, T29).
+- Order storage charged at open includes what later steps write (checkout URL ≤ 256 chars, three
+  timestamps, the first (lp, buyer) history entry). With no owner, nobody would top up the
+  contract's NEAR, and running out would freeze every state change. Storage is kept for history,
+  not refunded (THREAT T18 corrected).
+- Per-account order indexes are `LookupMap<(account, position), id>` + a count, O(1) per order. A
+  `Vec` rewritten on every open grew ~0.3–0.5 TGas per 1,000 past orders and would eventually make
+  a popular or griefed LP impossible to order from.
+- `ghs_amount_pesewas` is a U64 JSON string; buyers may pass `max_ghs_amount_pesewas` (slippage
+  guard against a rate change just before open).
+- No separate used-reference set: inv. 3 holds by construction (reference derived from the order
+  id, verified only for its own order, terminal states).
+Alternatives: global new-buyer counter weighted by volume (rejected: still gameable with one
+colluding LP); refund storage on close (rejected: loses history and lowers the griefing cost).
+

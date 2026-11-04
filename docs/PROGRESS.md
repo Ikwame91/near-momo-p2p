@@ -9,6 +9,37 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 — Session 4: PR #10 review fix-ups (D-020)
+Reviewers (security + code with 58 mutations) found no way to take USDC. Fixed:
+- Order indexes O(1) per order (LookupMap by position + counts) + count views; test proves the
+  bytes written per order stay constant (apart from the reference's id digits).
+- New-buyer status per (lp, buyer); `get_buyer_released(lp, buyer)`.
+- Order fields for later steps added now (checkout_url, attempt, failures, first/last failure,
+  lp_fault, release_at); storage for their growth + the first history entry pre-charged.
+- `ghs_amount_pesewas` → U64 string; optional `max_ghs_amount_pesewas` guard.
+- `lock_for_buy` checks everything before writing.
+- Tests: exact storage charge (with forced flush, so a missing contract flush fails), exact deposit
+  without refund, 1 yocto short fails, exposure and quote max at exactly the limit, real rate
+  change after open (T10), buyer max, per-LP history, mixed expiry, public liquidity check,
+  unlock guard, u64::MAX GHS, newest-end paging, empty later fields.
+- Mutation re-check: 14 reviewer-style mutations (incl. each map flush, cost/refund maths, both
+  `<=` boundaries, the new reservations and the per-LP key): all caught.
+- Docs: SPEC §4.1 / inv. 3 / inv. 14; THREAT T7, T10, T18 (no refund), T29; DECISIONS D-020;
+  PLAN notes for M1.5, M2.1, M5.1 and new M1.10 [nice].
+Test-setup lessons: mocked LookupMap edits made directly in tests must be flushed in the helper,
+or the next measured call writes (and is charged for) them.
+```
+$ cd contracts && cargo test
+     Running unittests src/lib.rs (target/debug/deps/openramp_escrow-d81469ffa25a38a7)
+test result: ok. 167 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.26s
+     Running unittests src/lib.rs (target/debug/deps/openramp_mock_ft-f436da86f5147f23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+$ cargo clippy --all-targets   (no output)
+```
+Next: merge PR #10; M1.5 verdict handling.
+
 ## 2026-11-03 — Session 3: M1.4 DONE (buy orders: open, expire, limits, views)
 Branch: `escrow/buy-orders` (from main after PR #9).
 Done (`src/orders.rs`, `src/orders_tests.rs`, `lp.rs`, `lib.rs`, `events.rs`):

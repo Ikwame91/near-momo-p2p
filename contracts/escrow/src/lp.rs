@@ -279,15 +279,19 @@ impl Escrow {
         require!(lp.key_fp.is_some(), "LP key not fingerprinted yet");
         require!(amount >= lp.quote.min_usdc.0, "amount below the LP's minimum");
         require!(amount <= lp.quote.max_usdc.0, "amount above the LP's maximum");
-        if new_buyer {
+        // Check everything first, then write (PR #10 review: easier to reason about).
+        let exposure = if new_buyer {
             require!(amount <= new_buyer_cap, "amount above the new-buyer cap");
-            let exposure = lp.new_buyer_open.0.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow"));
-            require!(exposure <= lp.quote.new_buyer_exposure_max.0, "LP's new-buyer exposure limit reached");
-            lp.new_buyer_open.0 = exposure;
-        }
+            let e = lp.new_buyer_open.0.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow"));
+            require!(e <= lp.quote.new_buyer_exposure_max.0, "LP's new-buyer exposure limit reached");
+            e
+        } else {
+            lp.new_buyer_open.0
+        };
         require!(lp.liquidity.0 >= amount, "not enough LP liquidity");
         let locked = lp.locked.0.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow"));
         require!(locked <= lp.bond.0, "bond does not cover this order");
+        lp.new_buyer_open.0 = exposure;
         lp.liquidity.0 -= amount;
         lp.locked.0 = locked;
         lp.open_orders = lp.open_orders.checked_add(1).unwrap_or_else(|| env::panic_str("overflow"));

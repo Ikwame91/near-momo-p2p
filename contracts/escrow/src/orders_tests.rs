@@ -48,6 +48,7 @@ fn with_lp(provider: &str, bond: u128, liquidity: u128) -> Escrow {
     e.ft_on_transfer(acc(LP), U128(bond), "bond".into()).detach();
     e.ft_on_transfer(acc(LP), U128(liquidity), "liquidity".into()).detach();
     e.lps.get_mut(&acc(LP)).unwrap().key_fp = Some("ab".repeat(32));
+    e.lps.flush(); // write test-only edits now, so they are not counted in a later order's storage
     e
 }
 
@@ -57,7 +58,7 @@ fn ready() -> Escrow {
 
 fn open(e: &mut Escrow, buyer: &str, usdc: u128) -> crate::Order {
     at(buyer, near(100), T0);
-    e.open_buy_order(acc(LP), U128(usdc))
+    e.open_buy_order(acc(LP), U128(usdc), None)
 }
 
 fn last_event() -> (String, Value) {
@@ -98,7 +99,7 @@ fn open_creates_order_locks_liquidity_and_emits() {
     assert_eq!(o.id, 0);
     assert_eq!(o.reference, format!("opr-{tag}-0"));
     assert_eq!(o.state, OrderState::AwaitingPayment);
-    assert_eq!(o.ghs_amount_pesewas, 15_000);
+    assert_eq!(o.ghs_amount_pesewas.0, 15_000);
     assert_eq!((o.opened_at.0, o.pay_deadline.0), (T0, T0 + 10 * MIN));
     assert!(o.new_buyer);
     assert_eq!(e.get_order(0), Some(o.clone()));
@@ -109,7 +110,7 @@ fn open_creates_order_locks_liquidity_and_emits() {
         (
             "order_opened".into(),
             json!({"order_id": 0, "lp": LP, "buyer": BUYER, "usdc_amount": "10000000",
-                   "ghs_amount_pesewas": 15000, "reference": format!("opr-{tag}-0"),
+                   "ghs_amount_pesewas": "15000", "reference": format!("opr-{tag}-0"),
                    "pay_deadline": (T0 + 10 * MIN).to_string()})
         )
     );
@@ -130,14 +131,14 @@ fn order_ids_and_references_increment() {
 fn open_without_storage_deposit_fails() {
     let mut e = ready();
     at(BUYER, near(0), T0);
-    e.open_buy_order(acc(LP), U128(USDC));
+    e.open_buy_order(acc(LP), U128(USDC), None);
 }
 
 #[test]
 fn open_refunds_storage_excess_to_buyer() {
     let mut e = ready();
     at(BUYER, NearToken::from_near(1), T0);
-    e.open_buy_order(acc(LP), U128(USDC));
+    e.open_buy_order(acc(LP), U128(USDC), None);
     let refunds: Vec<NearToken> = get_created_receipts()
         .into_iter()
         .filter(|r| r.receiver_id.as_str() == BUYER)
@@ -160,7 +161,7 @@ fn lp_cannot_buy_from_itself() {
 fn open_with_unknown_lp_fails() {
     let mut e = ready();
     at(BUYER, near(100), T0);
-    e.open_buy_order(acc("nobody.testnet"), U128(USDC));
+    e.open_buy_order(acc("nobody.testnet"), U128(USDC), None);
 }
 
 #[test]
@@ -199,7 +200,7 @@ fn open_below_quote_min_fails() {
 #[should_panic(expected = "amount above the LP's maximum")]
 fn open_above_quote_max_fails() {
     let mut e = ready();
-    e.buyer_released.insert(acc(BUYER), 3); // not new, so only the quote limit applies
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 3); // not new, so only the quote limit applies
     open(&mut e, BUYER, 200 * USDC + 1);
 }
 
@@ -221,7 +222,7 @@ fn new_buyer_order_at_cap_is_allowed() {
 #[test]
 fn experienced_buyer_is_not_capped() {
     let mut e = ready();
-    e.buyer_released.insert(acc(BUYER), 3); // new_buyer_orders = 3
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 3); // new_buyer_orders = 3
     let o = open(&mut e, BUYER, 120 * USDC);
     assert!(!o.new_buyer);
     assert_eq!(e.get_lp(acc(LP)).unwrap().new_buyer_open.0, 0);
@@ -230,9 +231,9 @@ fn experienced_buyer_is_not_capped() {
 #[test]
 fn buyer_with_fewer_released_orders_is_still_new() {
     let mut e = ready();
-    e.buyer_released.insert(acc(BUYER), 2);
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 2);
     assert!(open(&mut e, BUYER, USDC).new_buyer);
-    assert_eq!(e.get_buyer_released(acc(BUYER)), 2);
+    assert_eq!(e.get_buyer_released(acc(LP), acc(BUYER)), 2);
 }
 
 #[test]
@@ -347,7 +348,7 @@ fn list_views_page_by_lp_and_buyer() {
 #[test]
 fn list_view_limit_is_capped() {
     let mut e = with_lp("paystack", 200 * USDC, 300 * USDC);
-    e.buyer_released.insert(acc(BUYER), 3);
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 3);
     for _ in 0..(MAX_PAGE + 5) {
         open(&mut e, BUYER, USDC);
     }
@@ -362,4 +363,223 @@ fn order_json_uses_strings_for_large_numbers() {
     assert_eq!(v["state"], "AWAITING_PAYMENT");
     assert!(v["pay_deadline"].is_string(), "ns timestamps exceed JavaScript's 2^53");
     assert!(v["usdc_amount"].is_string());
+}
+
+// ---- PR #10 review fix-ups ----
+
+use crate::orders::{ORDER_GROWTH_BYTES, RECORD_OVERHEAD};
+use near_sdk::env;
+use near_sdk::json_types::U64;
+
+/// Register another fingerprinted paystack LP `lp` (same quote/bond/liquidity as `ready()`).
+fn add_lp(e: &mut Escrow, lp: &str) {
+    at(lp, near(100), T0);
+    e.register_lp("paystack".into(), SecretRef { profile: "sec".into(), account_id: acc(lp) }, quote(200 * USDC));
+    at(TOKEN, near(0), T0);
+    e.ft_on_transfer(acc(lp), U128(200 * USDC), "bond".into()).detach();
+    e.ft_on_transfer(acc(lp), U128(300 * USDC), "liquidity".into()).detach();
+    e.lps.get_mut(&acc(lp)).unwrap().key_fp = Some("ab".repeat(32));
+    e.lps.flush();
+}
+
+fn refund_to(who: &str) -> Vec<NearToken> {
+    get_created_receipts()
+        .into_iter()
+        .filter(|r| r.receiver_id.as_str() == who)
+        .flat_map(|r| r.actions)
+        .filter_map(|a| if let MockAction::Transfer { deposit, .. } = a { Some(deposit) } else { None })
+        .collect()
+}
+
+/// Bytes charged beyond what open writes for a first order of (lp, buyer).
+fn later_bytes(lp: &str, buyer: &str) -> u64 {
+    ORDER_GROWTH_BYTES + RECORD_OVERHEAD + 1 + (4 + lp.len() as u64) + (4 + buyer.len() as u64) + 4
+}
+
+#[test]
+fn storage_charge_is_exactly_written_bytes_plus_reserved_growth() {
+    let mut e = ready();
+    let paid = NearToken::from_near(1);
+    at(BUYER, paid, T0); // measure inside the same context as the call
+    let before = env::storage_usage();
+    e.open_buy_order(acc(LP), U128(USDC), None);
+    // Force every map to write NOW, independently of what the contract flushed itself, so a
+    // missing flush (= bytes stored but not charged) makes this test fail.
+    e.lps.flush();
+    e.orders.flush();
+    e.lp_orders.flush();
+    e.lp_order_count.flush();
+    e.buyer_orders.flush();
+    e.buyer_order_count.flush();
+    e.buyer_released.flush();
+    let written = env::storage_usage() - before;
+    let charged = env::storage_byte_cost().saturating_mul((written + later_bytes(LP, BUYER)) as u128);
+    assert_eq!(refund_to(BUYER), vec![paid.saturating_sub(charged)]);
+}
+
+/// Exact cost of a first order of (lp, buyer), read from the refund of an overpaid open.
+fn first_order_cost(e: &mut Escrow, lp: &str, buyer: &str) -> NearToken {
+    let paid = NearToken::from_near(1);
+    at(buyer, paid, T0);
+    e.open_buy_order(acc(lp), U128(USDC), None);
+    paid.saturating_sub(refund_to(buyer)[0])
+}
+
+#[test]
+fn exact_storage_deposit_succeeds_without_refund() {
+    // Same-length account ids, so the second first-order costs the same as the first.
+    let mut e = ready();
+    add_lp(&mut e, "lq.testnet");
+    let cost = first_order_cost(&mut e, LP, "b1.testnet");
+    at("b2.testnet", cost, T0);
+    e.open_buy_order(acc("lq.testnet"), U128(USDC), None);
+    assert!(refund_to("b2.testnet").is_empty());
+}
+
+#[test]
+#[should_panic(expected = "for storage")]
+fn storage_deposit_one_yocto_short_fails() {
+    let mut e = ready();
+    add_lp(&mut e, "lq.testnet");
+    let cost = first_order_cost(&mut e, LP, "b1.testnet");
+    at("b2.testnet", cost.saturating_sub(NearToken::from_yoctonear(1)), T0);
+    e.open_buy_order(acc("lq.testnet"), U128(USDC), None);
+}
+
+#[test]
+fn cost_per_order_does_not_grow_with_history() {
+    // O(1) index (PR #10 review): the 2nd and the 40th order of the same (lp, buyer) write the
+    // same number of bytes.
+    let mut e = ready();
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 3);
+    e.buyer_released.flush();
+    let mut written = vec![];
+    for i in 0..40u64 {
+        at(BUYER, near(100), T0);
+        let before = env::storage_usage();
+        e.open_buy_order(acc(LP), U128(USDC), None);
+        // The reference "opr-<tag>-<id>" grows by one byte per extra digit of the id; the rest
+        // (order record + index entries) must be constant.
+        let digits = i.to_string().len() as u64;
+        written.push(env::storage_usage() - before - digits);
+    }
+    assert!(written[1..].iter().all(|w| *w == written[1]), "{written:?}");
+    assert_eq!(e.count_orders_by_lp(acc(LP)), 40);
+    assert_eq!(e.count_orders_by_buyer(acc(BUYER)), 40);
+}
+
+#[test]
+fn new_buyer_exposure_at_exactly_the_limit_is_allowed() {
+    let mut e = ready();
+    open(&mut e, "n1.testnet", 50 * USDC);
+    open(&mut e, "n2.testnet", 50 * USDC); // 100 = new_buyer_exposure_max
+    assert_eq!(e.get_lp(acc(LP)).unwrap().new_buyer_open.0, 100 * USDC);
+}
+
+#[test]
+fn order_at_exactly_the_quote_max_is_allowed() {
+    let mut e = ready();
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 3);
+    assert_eq!(open(&mut e, BUYER, 200 * USDC).usdc_amount.0, 200 * USDC);
+}
+
+#[test]
+fn rate_change_after_open_does_not_change_the_order() {
+    // T10: the GHS amount is fixed when the order opens.
+    let mut e = ready();
+    open(&mut e, BUYER, 10 * USDC);
+    let mut q = quote(200 * USDC);
+    q.rate_pesewas_per_usdc = U128(9_999);
+    at(LP, NearToken::from_yoctonear(1), T0);
+    e.update_quote(q);
+    assert_eq!(e.get_order(0).unwrap().ghs_amount_pesewas.0, 15_000);
+}
+
+#[test]
+#[should_panic(expected = "GHS amount above the buyer's maximum")]
+fn rate_raised_before_open_is_caught_by_the_buyers_maximum() {
+    let mut e = ready();
+    let mut q = quote(200 * USDC);
+    q.rate_pesewas_per_usdc = U128(1_600); // LP raises the rate just before the buyer's call lands
+    at(LP, NearToken::from_yoctonear(1), T0);
+    e.update_quote(q);
+    at(BUYER, near(100), T0);
+    e.open_buy_order(acc(LP), U128(10 * USDC), Some(U64(15_000)));
+}
+
+#[test]
+fn buyers_maximum_equal_to_the_amount_is_allowed() {
+    let mut e = ready();
+    at(BUYER, near(100), T0);
+    let o = e.open_buy_order(acc(LP), U128(10 * USDC), Some(U64(15_000)));
+    assert_eq!(o.ghs_amount_pesewas.0, 15_000);
+}
+
+#[test]
+fn history_with_one_lp_does_not_make_a_buyer_experienced_with_another() {
+    // D-020: a colluding LP cannot "graduate" a buyer for honest LPs (T29).
+    let mut e = ready();
+    add_lp(&mut e, "lq.testnet");
+    e.buyer_released.insert((acc("lq.testnet"), acc(BUYER)), 3);
+    assert!(open(&mut e, BUYER, USDC).new_buyer, "still new with LP");
+    assert_eq!(e.get_buyer_released(acc(LP), acc(BUYER)), 0);
+    assert_eq!(e.get_buyer_released(acc("lq.testnet"), acc(BUYER)), 3);
+}
+
+#[test]
+fn mixed_new_and_experienced_orders_expire_cleanly() {
+    let mut e = ready();
+    open(&mut e, "n1.testnet", 10 * USDC);
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 3);
+    open(&mut e, BUYER, 20 * USDC);
+    assert_eq!(e.get_lp(acc(LP)).unwrap().new_buyer_open.0, 10 * USDC);
+    at("anyone.testnet", near(0), T0 + 13 * MIN);
+    e.expire_order(1);
+    assert_eq!(e.get_lp(acc(LP)).unwrap().new_buyer_open.0, 10 * USDC);
+    e.expire_order(0);
+    let lp = e.get_lp(acc(LP)).unwrap();
+    assert_eq!((lp.new_buyer_open.0, lp.locked.0, lp.liquidity.0, lp.open_orders), (0, 0, 300 * USDC, 0));
+}
+
+#[test]
+#[should_panic(expected = "not enough LP liquidity")]
+fn open_beyond_liquidity_fails() {
+    let mut e = with_lp("paystack", 200 * USDC, 5 * USDC);
+    open(&mut e, BUYER, 10 * USDC);
+}
+
+#[test]
+#[should_panic(expected = "unlock exceeds new-buyer exposure")]
+fn unlock_new_buyer_flag_without_new_buyer_lock_fails() {
+    let mut e = ready();
+    e.lock_for_buy(&acc(LP), USDC, false);
+    e.unlock(&acc(LP), USDC, true, true);
+}
+
+#[test]
+fn ghs_amount_at_u64_max_is_allowed() {
+    assert_eq!(ghs_amount_pesewas(u64::MAX as u128 * 1_000_000, 1), u64::MAX);
+}
+
+#[test]
+fn list_views_page_from_the_newest_end_with_counts() {
+    let mut e = ready();
+    e.buyer_released.insert((acc(LP), acc(BUYER)), 3);
+    for _ in 0..5 {
+        open(&mut e, BUYER, USDC);
+    }
+    let n = e.count_orders_by_buyer(acc(BUYER));
+    let newest: Vec<u64> = e.list_orders_by_buyer(acc(BUYER), n - 2, 2).into_iter().map(|o| o.id).collect();
+    assert_eq!(newest, vec![3, 4]);
+    assert_eq!(e.count_orders_by_lp(acc("nobody.testnet")), 0);
+}
+
+#[test]
+fn new_order_has_empty_later_fields() {
+    let mut e = ready();
+    let o = open(&mut e, BUYER, USDC);
+    assert_eq!((o.checkout_url.clone(), o.attempt, o.failures, o.lp_fault), (None, 0, 0, false));
+    assert!(o.first_failure_at.is_none() && o.last_failure_at.is_none() && o.release_at.is_none());
+    let v = serde_json::to_value(&o).unwrap();
+    assert!(v["ghs_amount_pesewas"].is_string());
 }

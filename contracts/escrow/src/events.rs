@@ -40,7 +40,7 @@ pub enum Event {
         lp: AccountId,
         buyer: AccountId,
         usdc_amount: U128,
-        ghs_amount_pesewas: u64,
+        ghs_amount_pesewas: U64,
         reference: String,
         pay_deadline: U64,
     },

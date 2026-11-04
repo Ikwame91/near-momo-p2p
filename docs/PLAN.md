@@ -50,7 +50,11 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       only, `key_fp` must be set, `ghs_amount` = ceil formula, new-buyer counter (`new_buyer_orders`)
       + per-order cap + per-LP exposure cap (inv. 14), order views `get_order` / `list_orders_by_lp`
       / `list_orders_by_buyer` (the web app needs them). Check: tests.
-- [ ] M1.5 [must] Verdict handling behind a `Verifier` trait with a mock: PAID / NOT_PAID /
+- [ ] M1.5 [must] (PR #10 review) `claim` accepted while `now <= pay_deadline + t_grace` (expire is
+      `>`: no gap, no overlap); `buyer_released[(lp, buyer)]` += 1 only on final RELEASED (checked
+      add); release delay keyed off `order.new_buyer`; claimable-balance entries are new storage:
+      reserve it or fund it from the order's pre-charge.
+      Verdict handling behind a `Verifier` trait with a mock: PAID / NOT_PAID /
       UNVERIFIABLE / PENDING, replay protection, reference + `key_fp` must match, callback carries
       (order_id, attempt) and stale ones are ignored (inv. 1–3, 10, T15), `finalize_release`,
       claimable balances for failed transfers + `withdraw_claimable` (D-017). Check: tests.
@@ -63,12 +67,16 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       ≥ owed (not =; stray mUSDC can be sent to the escrow). Check: tests.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
+- [ ] M1.10 [nice] Anti-griefing for experienced buyers (T7): small order fee paid to the LP on
+      expiry, or a per-buyer limit on concurrent open orders.
 - [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Also
       prove what unit tests cannot: `#[private]` callbacks reject strangers, double init rejected,
       NEP-141 refund on a rejected deposit, failed withdrawal (receiver unregistered) is re-credited,
       and record real gas burnt for ft_transfer / on_withdraw (D-016). Check: passes.
 
 ## M2 Verifier + real wiring (Nov 6–8)
+- [ ] M2.1 (PR #10 review) exact reference format in the verifier (`opr-` + 8 lowercase hex + `-` +
+      digits) and fix its stale `opr-<order_id>` doc comment.
 - [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
       verdict logic + 15 tests): `PaymentProvider` trait, Paystack adapter, verdict mapping, unit tests
       with recorded test-mode responses. Check: tests.
@@ -130,7 +138,8 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
 
 ## M5 Submission (Nov 12–14) — feature freeze Nov 12
 - [ ] M5.1 README for judges (PROMPTS.md §9): do X → see Y, mermaid diagram, test-mode disclosure,
-      payouts on the pawaPay sandbox and why (D-010, D-011), slash timing incl. the 72 h outage
+      payouts on the pawaPay sandbox and why (D-010, D-011), a buyer whose MoMo charge is pending
+      must claim within the grace window (otherwise anyone can expire the order), slash timing incl. the 72 h outage
       limit and its residual risk (D-012), production = licensed LPs + Act 1154,
       libraries/AI code used, licensing note (Act 1154), limitations.
 - [ ] M5.2 Fresh clone → setup → demo from scratch; fix breakages.

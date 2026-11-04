@@ -33,6 +33,8 @@ enum StorageKey {
     LpOrders,
     BuyerOrders,
     BuyerReleased,
+    LpOrderCount,
+    BuyerOrderCount,
 }
 
 /// Which OutLayer program checks payments. Fixed at deploy (invariant 9, T21, T26).
@@ -129,11 +131,14 @@ pub struct Escrow {
     lps: LookupMap<AccountId, Lp>,
     orders: LookupMap<u64, Order>,
     next_order_id: u64,
-    /// Order ids per LP and per buyer, for the list views (the web app needs them).
-    lp_orders: LookupMap<AccountId, Vec<u64>>,
-    buyer_orders: LookupMap<AccountId, Vec<u64>>,
-    /// RELEASED buy orders per buyer; below `new_buyer_orders` the buyer is new (SPEC §4.1).
-    buyer_released: LookupMap<AccountId, u32>,
+    /// Order ids per LP and per buyer by position, plus counts: O(1) per new order (PR #10 review).
+    lp_orders: LookupMap<(AccountId, u32), u64>,
+    lp_order_count: LookupMap<AccountId, u32>,
+    buyer_orders: LookupMap<(AccountId, u32), u64>,
+    buyer_order_count: LookupMap<AccountId, u32>,
+    /// RELEASED buy orders per (lp, buyer); below `new_buyer_orders` the buyer is new with that LP
+    /// (SPEC §4.1, D-020).
+    buyer_released: LookupMap<(AccountId, AccountId), u32>,
 }
 
 /// First 8 hex chars of sha256(contract_id ":" init_block_height), height in decimal
@@ -212,7 +217,9 @@ impl Escrow {
             orders: LookupMap::new(StorageKey::Orders),
             next_order_id: 0,
             lp_orders: LookupMap::new(StorageKey::LpOrders),
+            lp_order_count: LookupMap::new(StorageKey::LpOrderCount),
             buyer_orders: LookupMap::new(StorageKey::BuyerOrders),
+            buyer_order_count: LookupMap::new(StorageKey::BuyerOrderCount),
             buyer_released: LookupMap::new(StorageKey::BuyerReleased),
         }
     }
