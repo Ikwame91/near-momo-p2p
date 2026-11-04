@@ -82,7 +82,7 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       `OUTAGE` (`T_outage_max`) (T5, T8, T25, T30, T31, inv. 11, D-012). The contract-set OutLayer
       deposit/limits are already fixed in `Params.outlayer_call`; attaching them to the real call is
       M2.2. Check: tests with time travel.
-- [ ] M1.7 [must] Books check (inv. 6) as ONE test across all flows: contract balance ≥ owed (not =;
+- [x] M1.7 [must] Books check (inv. 6) as ONE test across all flows: contract balance ≥ owed (not =;
       stray mUSDC can be sent to the escrow). Check: test passes.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
@@ -95,40 +95,45 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       and record real gas burnt for ft_transfer / on_withdraw (D-016). Check: passes.
 
 ## M2 Verifier + real wiring (Nov 6–8)
-- [ ] M2.1 (PR #11 review) the verifier output must carry `key_fp` and a `PENDING` verdict (Test A's has
+- [x] M2.1 (PR #11 review) the verifier output must carry `key_fp` and a `PENDING` verdict (Test A's has
       neither). Probe how long Paystack keeps an unapproved GH mobile-money charge pending; if it
       can stay pending indefinitely, a buyer could slash without paying (T25 via PENDING): map
       "pending older than pay_deadline + X" to NOT_PAID and record it in DECISIONS.
-- [ ] M2.1 (PR #10 review) exact reference format in the verifier (`opr-` + 8 lowercase hex + `-` +
+- [x] M2.1 (PR #10 review) exact reference format in the verifier (`opr-` + 8 lowercase hex + `-` +
       digits) and fix its stale `opr-<order_id>` doc comment.
-- [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
+- [x] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
       verdict logic + 15 tests): `PaymentProvider` trait, Paystack adapter, verdict mapping, unit tests
       with recorded test-mode responses. Check: tests.
-- [ ] M2.1b [must] (PR #12 review) verifier: map only HTTP 401 to `auth_error` (403 is an outage, test it);
+- [x] M2.1b [must] (PR #12 review) verifier: map only HTTP 401 to `auth_error` (403 is an outage, test it);
       check amount ≥ expected, currency GHS and channel `mobile_money` before PAID **and** before
       PENDING; treat `paid_at ≤ pay_deadline + t_grace` as on time (the escrow passes that deadline);
       probe whether a buyer can create the Paystack transaction for our reference with the public key.
-- [ ] M2.1b [must] Verifier modes: `fingerprint` (returns `key_fp`, either provider), `checkout`
+- [x] M2.1b [must] Verifier modes: `fingerprint` (returns `key_fp`, either provider), `checkout`
       (Paystack initialize: GHS, mobile_money only, synthetic email), `verify` output carries
       `key_fp`; `pending` reason; only 401 = `auth_error`, 403 and unknown = outage (D-017).
       Check: tests + testnet run.
-- [ ] M2.2c [must] Escrow `request_fingerprint` + callback (PR #9 review): stores `key_fp` only if
+- [x] M2.2c [must] Escrow `request_fingerprint` + callback (PR #9 review): stores `key_fp` only if
       `key_fp` is None, zero open orders, `secret_gen` unchanged (bumped by `set_secret_ref`, so a
       stale run for an old secret cannot land), exactly 64 lowercase hex; caller check in the body.
       Check: tests incl. the stale-callback race.
-- [ ] M2.2b [must] Escrow `request_checkout(order_id)` → checkout mode → callback stores
+- [x] M2.2b [must] Escrow `request_checkout(order_id)` → checkout mode → callback stores
       `authorization_url` (D-017). Check: tests + testnet run.
-- [ ] M2.2 (PR #12 review) refund the OutLayer fee when `claim` returns 0 (it slashed instead).
-- [ ] M2.2 (PR #11 review) the OutLayer callback `on_verdict_result(order_id, attempt)` (args built in the
+- [x] M2.2 (PR #12 review) refund the OutLayer fee when `claim` returns 0 (it slashed instead).
+- [x] M2.2 (PR #11 review) the OutLayer callback `on_verdict_result(order_id, attempt)` (args built in the
       contract at claim time, never from the payload) reads the raw bytes with
       `promise_result_checked`, maps anything unparseable / unknown to `RunFailed` (never panics),
       then calls `apply_verdict`. Require `t_grace` > worst-case verification latency.
-- [ ] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
-- [ ] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
-- [ ] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
+- [x] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
+- [x] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
+      (Done Nov 4 on escrow-d1 with the real test key; NOT_PAID → expire also shown. Tx links in PROGRESS.)
+- [ ] M2.3b [must] Checkout email fix (done in source) → rebuild verifier, redeploy (d2), Kwame re-stores
+      the secret for the new hash; show request_checkout returning a Paystack URL.
+- [x] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
+      (Done Nov 4 with a fake key on escrow-d1: scripts/buy.sh, tx links in PROGRESS.)
 - [ ] M2.6 Reproducible verifier build (rust-toolchain.toml; OutLayer GitHub compile if possible,
       SPEC Q7). Check: a second build gives the same sha256.
-- [ ] M2.8 [must] `scripts/deploy.sh` (mock-ft, storage registrations, mint, batched deploy + `new`,
+- [ ] M2.8 [must] (testnet scripts done: deploy-testnet.sh, lp-setup.sh, buy.sh; key deletion and the
+      final reproducible deploy still open) `scripts/deploy.sh` (mock-ft, storage registrations, mint, batched deploy + `new`,
       delete key) and `scripts/lp-setup.sh` (store secret `--via` escrow, register LP). Testnet
       deploys before M3 are throwaway; the final reproducible deploy comes after M3.1, because the
       verifier must already include pawaPay and cannot change later. Check: fresh run works.

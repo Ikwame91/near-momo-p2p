@@ -61,6 +61,12 @@ pub enum Event {
     #[event_version("1.0.0")]
     ClaimableCredited { account: AccountId, amount: U128 },
     /// The LP's bond paid the buyer (claimable); `lp_fault` says which window applied.
+    /// The TEE fingerprinted the LP's key; the LP can now take orders.
+    #[event_version("1.0.0")]
+    LpFingerprinted { lp: AccountId, key_fp: String },
+    /// The TEE created the Paystack checkout for this order.
+    #[event_version("1.0.0")]
+    OrderCheckout { order_id: u64, checkout_url: String },
     #[event_version("1.0.0")]
     OrderSlashed { order_id: u64, lp: AccountId, buyer: AccountId, amount: U128, lp_fault: bool },
 }

@@ -62,7 +62,7 @@ impl Escrow {
     /// (counted as an outage failure; if that completes the slash window the order is slashed and
     /// 0 is returned). Returns the new attempt number, which the verdict must carry. M2.2 adds the
     /// OutLayer call and the contract-set fee.
-    pub fn claim(&mut self, order_id: u64) -> u32 {
+    pub(crate) fn begin_claim(&mut self, order_id: u64) -> u32 {
         let now = env::block_timestamp();
         let grace = self.params.t_grace_ns;
         let order = self.orders.get_mut(&order_id).unwrap_or_else(|| env::panic_str("no such order"));

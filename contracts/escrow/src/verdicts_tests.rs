@@ -72,7 +72,7 @@ fn output(e: &Escrow, verdict: Verdict, reason: &str) -> VerifierResult {
 /// Claim order 0 at `time`, then deliver `result` for that attempt as the contract itself.
 fn verify(e: &mut Escrow, time: u64, result: VerifierResult) -> bool {
     at("anyone.testnet", time);
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     at(ME, time);
     e.on_verdict(0, attempt, result)
 }
@@ -110,7 +110,7 @@ fn ft_transfers() -> Vec<(String, String)> {
 fn claim_starts_verification_and_counts_attempts() {
     let mut e = with_order();
     at("anyone.testnet", T0 + MIN);
-    assert_eq!(e.claim(0), 1);
+    assert_eq!(e.begin_claim(0), 1);
     assert_eq!(state(&e), OrderState::Verifying);
     assert_eq!(events().last().unwrap(), "order_verifying");
 }
@@ -119,7 +119,7 @@ fn claim_starts_verification_and_counts_attempts() {
 fn claim_at_exactly_deadline_plus_grace_is_allowed() {
     let mut e = with_order();
     at("anyone.testnet", LAST_CLAIM);
-    e.claim(0);
+    e.begin_claim(0);
     assert_eq!(state(&e), OrderState::Verifying);
 }
 
@@ -128,7 +128,7 @@ fn claim_at_exactly_deadline_plus_grace_is_allowed() {
 fn claim_after_deadline_plus_grace_fails() {
     let mut e = with_order();
     at("anyone.testnet", LAST_CLAIM + 1);
-    e.claim(0);
+    e.begin_claim(0);
 }
 
 #[test]
@@ -137,15 +137,15 @@ fn claim_while_verifying_fails() {
     // Only one verification in flight per order (SPEC §6).
     let mut e = with_order();
     at("anyone.testnet", T0);
-    e.claim(0);
-    e.claim(0);
+    e.begin_claim(0);
+    e.begin_claim(0);
 }
 
 #[test]
 #[should_panic(expected = "no such order")]
 fn claim_unknown_order_fails() {
     let mut e = with_order();
-    e.claim(9);
+    e.begin_claim(9);
 }
 
 // ---- PAID → release (inv. 1) ----
@@ -202,7 +202,7 @@ fn stale_verdict_for_an_older_attempt_is_ignored() {
     let mut e = with_order();
     { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, T0 + MIN, r) }; // attempt 1
     at("anyone.testnet", T0 + 2 * MIN);
-    assert_eq!(e.claim(0), 2);
+    assert_eq!(e.begin_claim(0), 2);
     at(ME, T0 + 2 * MIN);
     let r = output(&e, Verdict::Paid, "ok");
     assert!(!e.on_verdict(0, 1, r));
@@ -232,7 +232,7 @@ fn verdict_from_a_stranger_is_rejected() {
     // T13 (also #[private] in wasm).
     let mut e = with_order();
     at("anyone.testnet", T0);
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     at("attacker.testnet", T0);
     let r = output(&e, Verdict::Paid, "ok");
     e.on_verdict(0, attempt, r);
@@ -309,7 +309,7 @@ fn three_releases_make_the_buyer_experienced_with_that_lp() {
         let o = e.open_buy_order(acc(LP), U128(USDC), None);
         assert!(o.new_buyer);
         at("anyone.testnet", T0);
-        let attempt = e.claim(id);
+        let attempt = e.begin_claim(id);
         at(ME, T0);
         let r = VerifierResult::Output(VerifierOutput {
             verdict: Verdict::Paid,
@@ -375,7 +375,7 @@ fn lp_fault_for(e: &mut Escrow, buyer: &str, reason: &str) -> bool {
     at(buyer, T0);
     let o = e.open_buy_order(acc(LP), U128(USDC), None);
     at("anyone.testnet", T0);
-    let attempt = e.claim(o.id);
+    let attempt = e.begin_claim(o.id);
     at(ME, T0);
     let r = VerifierResult::Output(VerifierOutput {
         verdict: Verdict::Unverifiable,
@@ -506,7 +506,7 @@ fn paid_verdict_fits_in_the_minimum_callback_gas() {
     // (MIN_CALLBACK_GAS_TGAS) is enough; a panic here would leave the order stuck in VERIFYING.
     let mut e = with_order();
     at("anyone.testnet", T0 + MIN);
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     let r = output(&e, Verdict::Paid, "ok");
     testing_env!(VMContextBuilder::new()
         .current_account_id(acc(ME))
@@ -560,7 +560,7 @@ fn two_failed_payouts_add_up() {
 fn claim_on_release_pending_fails() {
     let mut e = with_delay();
     { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
-    e.claim(0);
+    e.begin_claim(0);
 }
 
 #[test]
@@ -568,7 +568,7 @@ fn claim_on_release_pending_fails() {
 fn claim_on_released_fails() {
     let mut e = with_order();
     { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
-    e.claim(0);
+    e.begin_claim(0);
 }
 
 #[test]
@@ -577,14 +577,14 @@ fn claim_on_expired_fails() {
     let mut e = with_order();
     at("anyone.testnet", LAST_CLAIM + 1);
     e.expire_order(0);
-    e.claim(0);
+    e.begin_claim(0);
 }
 
 #[test]
 fn verdict_events_carry_the_right_data() {
     let mut e = with_order();
     at("anyone.testnet", T0 + MIN);
-    e.claim(0);
+    e.begin_claim(0);
     assert_eq!(event_data().last().unwrap(), &("order_verifying".into(), json!({"order_id": 0, "attempt": 1})));
     at(ME, T0 + MIN);
     let r = output(&e, Verdict::Unverifiable, "auth_error");
@@ -594,7 +594,7 @@ fn verdict_events_carry_the_right_data() {
         &("order_unverified".into(), json!({"order_id": 0, "attempt": 1, "failures": 1, "lp_fault": true}))
     );
     at("anyone.testnet", T0 + 2 * MIN);
-    e.claim(0);
+    e.begin_claim(0);
     at(ME, T0 + 2 * MIN);
     let r = output(&e, Verdict::Paid, "ok");
     e.on_verdict(0, 2, r);
@@ -668,7 +668,7 @@ fn slow_not_paid_for_an_early_check_gives_a_fresh_grace_period() {
     // deadline + grace; the buyer may have paid on time, so the order must not expire yet.
     let mut e = with_order();
     at("anyone.testnet", DEADLINE - MIN);
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     at(ME, LAST_CLAIM + 5 * MIN);
     let r = output(&e, Verdict::NotPaid, "not_found");
     e.on_verdict(0, attempt, r);
@@ -676,7 +676,7 @@ fn slow_not_paid_for_an_early_check_gives_a_fresh_grace_period() {
     assert_eq!(o.state, OrderState::AwaitingPayment);
     assert_eq!(o.claim_until.map(|t| t.0), Some(LAST_CLAIM + 7 * MIN)); // now + t_grace
     at("anyone.testnet", LAST_CLAIM + 7 * MIN); // the buyer can claim again until then
-    e.claim(0);
+    e.begin_claim(0);
     assert_eq!(state(&e), OrderState::Verifying);
 }
 
@@ -685,7 +685,7 @@ fn slow_not_paid_for_an_early_check_gives_a_fresh_grace_period() {
 fn order_cannot_be_expired_during_the_fresh_grace_period() {
     let mut e = with_order();
     at("anyone.testnet", DEADLINE - MIN);
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     at(ME, LAST_CLAIM + 5 * MIN);
     let r = output(&e, Verdict::NotPaid, "not_found");
     e.on_verdict(0, attempt, r);
@@ -698,7 +698,7 @@ fn not_paid_for_a_check_started_after_the_deadline_expires_after_grace() {
     // A check that started after the deadline can only find a late payment: no extension.
     let mut e = with_order();
     at("anyone.testnet", DEADLINE + MIN); // inside the grace window
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     at(ME, LAST_CLAIM + 1);
     let r = output(&e, Verdict::NotPaid, "not_found");
     e.on_verdict(0, attempt, r);
@@ -710,9 +710,9 @@ fn not_paid_for_a_check_started_after_the_deadline_expires_after_grace() {
 fn stuck_verification_cannot_be_reclaimed_before_the_timeout() {
     let mut e = with_order();
     at("anyone.testnet", T0);
-    e.claim(0);
+    e.begin_claim(0);
     at("anyone.testnet", T0 + VERIFY_TIMEOUT_NS);
-    e.claim(0);
+    e.begin_claim(0);
 }
 
 #[test]
@@ -720,9 +720,9 @@ fn stuck_verification_can_be_reclaimed_after_the_timeout() {
     // H2: a callback that never arrives (or panicked) must not freeze the order and the bond.
     let mut e = with_order();
     at("anyone.testnet", T0);
-    assert_eq!(e.claim(0), 1);
+    assert_eq!(e.begin_claim(0), 1);
     at("anyone.testnet", T0 + VERIFY_TIMEOUT_NS + 1);
-    assert_eq!(e.claim(0), 2);
+    assert_eq!(e.begin_claim(0), 2);
     let o = e.get_order(0).unwrap();
     assert_eq!((o.state, o.failures, o.lp_fault), (OrderState::Verifying, 1, false), "counted as an outage");
     at(ME, T0 + VERIFY_TIMEOUT_NS + 2);

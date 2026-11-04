@@ -9,6 +9,84 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 22:45 UTC — Session 4c: real OutLayer → Paystack check works on testnet (M2.3)
+Done (escrow-d1, LP ikwame.testnet, Kwame's real Paystack TEST key in OutLayer profile `paystack-lp`,
+hash 6a9ff46b…, access `from:escrow-d1.ikwame.testnet`):
+- set_secret_ref → paystack-lp (6xC5vqjMSKywDWm3G3KCQerh3ktJeT9qs9c5cBTzAXSW); request_fingerprint →
+  key_fp 9d2894e2… (5fKvk97fFvMTpXZGiZAN9KLQkU2P4AjHMRtcn2Dq4qU1).
+- PAID: order 1, 2 mUSDC = 30 GHS (6TJNHuioXVimkwme4nFtNfXAEwDvmwQxr61QQN49RFp5); paid with a Paystack
+  test MoMo charge (MTN test number) for reference opr-f51ae4a2-1; claim → `order_released`
+  (9jsoF6soxwd7t1zVjfbn1n2WYSMGhYisF75P2GbcudJ); withdraw → buyer 12 mUSDC (F36rJP9BkckAWsSwHN8SAuTYTRXY5UWU3SjwwJhonUJc).
+- NOT_PAID: order 2, 3 mUSDC, never paid (5PVBnibr4kS1LKmay8gGm8NDKvr61hWs1A6aVkYGsRq); claim →
+  `order_not_paid`, failures 0 (578ZZGyXfp4WzS2fPAQbaXf3aP5HPmy3CnXb16Cvgb6n); after deadline + grace
+  expire_order → EXPIRED, LP unlocked, bond untouched (HEubiXioKTP1GXe8y3QpJNRW7B338KyN5G6eS2HUeWN8).
+  LP after: bond 40, liquidity 98, locked 0.
+Failed / blocked:
+- request_checkout on order 1 returned `http_error` (tx 3AseaWvyxMbTD9SRd7rzjpmbhmUQWyBgpBPvWBhK4mjh):
+  Paystack rejects the synthetic email `buyer@openramp.example` (400 invalid_email_address). Fixed in
+  source (`buyer@example.com`, accepted in a probe; test added). Needs a verifier rebuild → new hash →
+  new escrow deploy (verifier fixed at init) → Kwame stores the secret again for the new hash.
+Next: bundle any other verifier fixes, rebuild, redeploy as d2, checkout URL demo; web page M4.1.
+Gotchas: the program's JSON output is visible as the outlayer.testnet receipt's SuccessValue in
+EXPERIMENTAL_tx_status (how the http_error was found).
+
+## 2026-11-04 22:10 UTC — Session 4b: testnet deploy (M2.8) + slash shown on testnet (M2.4)
+Done:
+- `scripts/deploy-testnet.sh d1`: musdc-d1.ikwame.testnet (mock-ft, tx GBWBmYH4dYvTwoiAf7iYYB628E4qMzPeMy8NLBWfNrE2),
+  escrow-d1.ikwame.testnet deploy + `new` in one tx signed by the escrow (AundrHUg9zp82Z6oZS33bKNcvhBVPKh6GyTtfLLutf5m).
+  get_config: token musdc-d1, outlayer outlayer.testnet, deploy_tag f51ae4a2, verifier 6a9ff46b….
+- `scripts/lp-setup.sh d1 ikwame.testnet smoke-fake`: mint, register_lp, bond 50, liquidity 100,
+  `request_fingerprint` through the escrow → real OutLayer run → callback stored key_fp `931d1516…`
+  (tx HyCobpCWuxdmroU88Wq66rq1Bh1kEKBR3WL2W9ftQ3z).
+- Slash on testnet with the FAKE key (`scripts/buy.sh`): order 0 (10 mUSDC, opr-f51ae4a2-0,
+  tx 42YbW7J5Qa7poTMfNkUqYyNrrzvgsh42ctCCUD4oM15p); claim 1 → UNVERIFIED, lp_fault, failures 1
+  (AVz7QqGD7w9ZB1EnZqQeF8ywLtSY4aJiJPwWCxy5XZ7M); claim 2 after t_retry (3 min) → `order_slashed`
+  10 mUSDC (Hz3QLHuYosA7oirTpKmHyZ2Ktjvn4QnQbCJ6ggkquDyB); withdraw_claimable → buyer holds 10 mUSDC
+  (6DeqoxB6TR8zJBPqSDe5GnZZZb9HEW1wJwQmrjt8Vic4). LP after: bond 40, liquidity 100, locked 0.
+Failed / blocked:
+- PAID path waits on [K]: real Paystack test key as OutLayer secret profile `paystack-lp` for hash
+  6a9ff46b… with `--access allow-all --via escrow-d1.ikwame.testnet` (old `paystack` profile is bound
+  to the Test A hash).
+Next: set_secret_ref → paystack-lp, request_fingerprint, open → checkout → pay (test MoMo) → claim → PAID.
+Gotchas: near CLI output ends with a "console command" line containing `{}`; parse only after
+"return value".
+
+## 2026-11-04 — Session 4: OutLayer wiring done (M2.1, M2.1b, M2.2, M2.2b, M2.2c), unit level
+- `verifier/` crate (v2): modes fingerprint / checkout / verify; key_fp in every verify output;
+  PENDING; only 401 = auth_error; amount, currency and mobile_money channel checked before PAID
+  and PENDING; exact `opr-<8hex>-<id>`; checkout via Paystack initialize (GHS, mobile_money,
+  synthetic email). 19 tests. wasm sha256 6a9ff46b643c65ef7339c5d6b7f573b55c09f7764c614c101c958d76a440926f.
+- TEE smoke test (CLI, FAKE key bound to the hash): fingerprint → `931d1516…` (= sha256 of the fake
+  key, tx CEKQRPBEzDUtCrzV9eyJCSNue4cKU7vvh7vX3kegxdaE); verify → UNVERIFIABLE auth_error
+  (tx A7euG5BMCNYo6qBurg3M35w9iiu3w9CUctCKA41y5BDT); checkout → error auth_error, i.e. the POST
+  reached Paystack (tx FbR7vhtwFx923vsaPuRfBf38138wH6pvnxnL5wsMNB1a). First fingerprint try hit an
+  RPC timeout; the retry worked.
+- Escrow: payable `claim` (fee, exact request_execution args, callback args built in the contract,
+  fee refunded when it slashes), `on_verdict_result` (raw bytes, never panics), `request_fingerprint`
+  + `on_fingerprint_result` (64 hex, key_fp unset, no open orders, `secret_gen` unchanged),
+  `request_checkout` + `on_checkout_result` (Paystack URL ≤ 256 chars, this order's reference).
+  Internal logic renamed `begin_claim` (tests use it). 14 new tests.
+```
+$ cd contracts && cargo test
+test result: ok. 264 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+$ cd verifier && cargo test
+test result: ok. 19 passed; 0 failed
+```
+Next: testnet deploy (M2.8 script), LP setup, created → PAID, slash.
+
+## 2026-11-04 — Session 4: M1.7 DONE (books check, one test)
+`books_tests::books_balance_covers_everything_owed_across_all_flows`: models the contract's USDC
+balance (in via ft_on_transfer, out via successful transfers) through deposits, stray tokens, 4
+orders (release, failed then successful payout, slash, NOT_PAID then release, expiry), LP
+withdrawals; checks balance ≥ owed (inv. 6) and locked ≤ bond (inv. 5) after every step, and at the
+end that only the stray tokens are unowed. Sanity: with the slash's bond debit removed it fails
+("inv. 6 broken after slash o1 ... balance 297000000 < owed 310000000").
+```
+$ cargo test -q
+test result: ok. 250 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.63s
+```
+Next: OutLayer wiring (verifier v2 modes, escrow claim → OutLayer, fingerprint, checkout).
+
 ## 2026-11-04 — Session 4: PR #12 review fix-ups (D-022)
 Reviewers: no fund-safety bug in the slash code, but a buyer-side attack (H1) and two fairness gaps.
 Fixed:
