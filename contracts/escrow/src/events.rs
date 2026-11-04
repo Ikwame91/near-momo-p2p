@@ -4,7 +4,7 @@
 //! numbers, keys, secret profile names or salts (inv. 7, T19).
 
 use crate::Pot;
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U128, U64};
 use near_sdk::{near, AccountId};
 
 #[near(event_json(standard = "openramp"))]
@@ -33,4 +33,17 @@ pub enum Event {
     LpPaused { lp: AccountId },
     #[event_version("1.0.0")]
     LpResumed { lp: AccountId },
+    /// A buy order was opened. The buyer pays `ghs_amount_pesewas` with `reference`.
+    #[event_version("1.0.0")]
+    OrderOpened {
+        order_id: u64,
+        lp: AccountId,
+        buyer: AccountId,
+        usdc_amount: U128,
+        ghs_amount_pesewas: U64,
+        reference: String,
+        pay_deadline: U64,
+    },
+    #[event_version("1.0.0")]
+    OrderExpired { order_id: u64 },
 }

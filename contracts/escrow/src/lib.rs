@@ -12,18 +12,29 @@ use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 
 mod events;
 mod lp;
+mod orders;
 pub use events::Event;
 pub use lp::{Lp, Pot, Quote, SecretRef, PROVIDERS};
+pub use orders::{Order, OrderState};
 
 #[cfg(test)]
 mod lp_tests;
 #[cfg(test)]
 mod lp_m13_tests;
+#[cfg(test)]
+mod orders_tests;
 
 #[near]
 #[derive(BorshStorageKey)]
 enum StorageKey {
+    // Append only: the borsh variant index is the storage prefix; never reorder.
     Lps,
+    Orders,
+    LpOrders,
+    BuyerOrders,
+    BuyerReleased,
+    LpOrderCount,
+    BuyerOrderCount,
 }
 
 /// Which OutLayer program checks payments. Fixed at deploy (invariant 9, T21, T26).
@@ -91,7 +102,10 @@ pub struct Params {
     /// Slash/refund window when every failure is an outage; hard limit (D-012).
     pub t_outage_max_ns: u64,
     pub min_failed_attempts: u8,
+    /// Max USDC per order while the buyer is new (SPEC §4.1).
     pub new_buyer_cap: U128,
+    /// A buyer stops being new after this many RELEASED buy orders (1–100, SPEC §7).
+    pub new_buyer_orders: u32,
     pub release_delay_ns: u64,
     pub outlayer_call: OutlayerCall,
 }
@@ -115,6 +129,16 @@ pub struct Escrow {
     params: Params,
     deploy_tag: String,
     lps: LookupMap<AccountId, Lp>,
+    orders: LookupMap<u64, Order>,
+    next_order_id: u64,
+    /// Order ids per LP and per buyer by position, plus counts: O(1) per new order (PR #10 review).
+    lp_orders: LookupMap<(AccountId, u32), u64>,
+    lp_order_count: LookupMap<AccountId, u32>,
+    buyer_orders: LookupMap<(AccountId, u32), u64>,
+    buyer_order_count: LookupMap<AccountId, u32>,
+    /// RELEASED buy orders per (lp, buyer); below `new_buyer_orders` the buyer is new with that LP
+    /// (SPEC §4.1, D-020).
+    buyer_released: LookupMap<(AccountId, AccountId), u32>,
 }
 
 /// First 8 hex chars of sha256(contract_id ":" init_block_height), height in decimal
@@ -152,6 +176,7 @@ fn validate(me: &AccountId, token: &AccountId, outlayer: &AccountId, verifier: &
         "min_failed_attempts must be 2-10"
     );
     require!(p.new_buyer_cap.0 > 0, "new_buyer_cap must be > 0");
+    require!((1..=100).contains(&p.new_buyer_orders), "new_buyer_orders must be 1-100");
     let c = &p.outlayer_call;
     require!(c.fee.0 > 0, "outlayer fee must be > 0");
     require!(c.fee.0 <= MAX_OUTLAYER_FEE_YOCTO, "outlayer fee too high");
@@ -182,7 +207,21 @@ impl Escrow {
         require!(env::predecessor_account_id() == me, "only the contract account can initialise it");
         validate(&me, &token, &outlayer, &verifier, &params);
         let deploy_tag = compute_deploy_tag(&me, env::block_height());
-        Self { token, outlayer, verifier, params, deploy_tag, lps: LookupMap::new(StorageKey::Lps) }
+        Self {
+            token,
+            outlayer,
+            verifier,
+            params,
+            deploy_tag,
+            lps: LookupMap::new(StorageKey::Lps),
+            orders: LookupMap::new(StorageKey::Orders),
+            next_order_id: 0,
+            lp_orders: LookupMap::new(StorageKey::LpOrders),
+            lp_order_count: LookupMap::new(StorageKey::LpOrderCount),
+            buyer_orders: LookupMap::new(StorageKey::BuyerOrders),
+            buyer_order_count: LookupMap::new(StorageKey::BuyerOrderCount),
+            buyer_released: LookupMap::new(StorageKey::BuyerReleased),
+        }
     }
 
     pub fn get_config(&self) -> ConfigView {
@@ -218,6 +257,7 @@ pub(crate) mod tests {
             t_outage_max_ns: 6 * MIN,
             min_failed_attempts: 2,
             new_buyer_cap: U128(50_000_000),
+            new_buyer_orders: 3,
             release_delay_ns: 0,
             outlayer_call: OutlayerCall {
                 fee: U128(10_000_000_000_000_000_000_000),
@@ -554,6 +594,22 @@ pub(crate) mod tests {
     fn rejects_outlayer_fee_over_1_near() {
         let mut p = params();
         p.outlayer_call.fee = U128(MAX_OUTLAYER_FEE_YOCTO + 1);
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "new_buyer_orders must be 1-100")]
+    fn rejects_zero_new_buyer_orders() {
+        let mut p = params();
+        p.new_buyer_orders = 0;
+        init_params(p);
+    }
+
+    #[test]
+    #[should_panic(expected = "new_buyer_orders must be 1-100")]
+    fn rejects_101_new_buyer_orders() {
+        let mut p = params();
+        p.new_buyer_orders = 101;
         init_params(p);
     }
 

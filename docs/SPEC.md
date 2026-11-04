@@ -76,14 +76,27 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
    the bond rule, the per-account new-buyer cap and the LP's `new_buyer_exposure_max`, locks
    `usdc_amount` of LP liquidity, and computes `ghs_amount_pesewas = ceil(usdc_amount ×
    rate_pesewas_per_usdc / 1_000_000)` with checked maths (rounded **up**, protecting the LP); it
-   must be > 0 and fit in u64. A buyer is **new** while they have fewer than `new_buyer_orders`
-   RELEASED buy orders in this deployment; for a new buyer each order is capped at `new_buyer_cap`
-   and counts towards the LP's `new_buyer_exposure_max` (D-017). It issues `order_id`
+   must be > 0 and fit in u64. A buyer is **new with an LP** while they have fewer than
+   `new_buyer_orders` RELEASED buy orders **with that LP** (per (lp, buyer), D-020: a colluding LP
+   cannot "graduate" a buyer for honest LPs); for a new buyer each order is capped at
+   `new_buyer_cap` and counts towards that LP's `new_buyer_exposure_max` (D-017). The buyer may pass
+   `max_ghs_amount_pesewas` to refuse a rate raised just before the order opens. Storage charged at
+   open covers what the order writes now **and** what later steps will write (checkout URL ≤ 256
+   chars, verification timestamps, the first (lp, buyer) history entry; D-020); it is kept for the
+   order's history, not refunded. Per-account order indexes cost the same for every order. It
+   issues `order_id`
    and the **payment reference** `opr-<deploy_tag>-<order_id>` (derived only by the contract, so it
    is bound to this order; `deploy_tag` = first 8 hex chars of
    `sha256(contract_id ":" init_block_height)` with the height in decimal, e.g.
    `sha256("escrow.testnet:100")`, so references never repeat across deployments).
-   State `AWAITING_PAYMENT`, `pay_deadline = now + T_pay`.
+   State `AWAITING_PAYMENT`, `pay_deadline = now + T_pay`. The buyer attaches NEAR for the order's
+   storage (excess refunded); an LP cannot buy from itself. Anyone may call `expire_order` once
+   `now > pay_deadline + T_grace` while the order still awaits payment. Views: `get_order`,
+   `list_orders_by_lp` / `list_orders_by_buyer` (pages of ≤ 50), `get_buyer_released`. Timestamps
+   and amounts (incl. `ghs_amount_pesewas`) are JSON strings (`U64` / `U128`), because ns
+   timestamps exceed JavaScript's 2^53. `count_orders_by_lp` / `count_orders_by_buyer` let the app
+   page from the newest end.
+   Events: `order_opened`, `order_expired`.
 2. Buyer calls `request_checkout(order_id)` (fee set by the contract, as in step 3). The escrow
    runs the verifier in `checkout` mode inside the TEE with **the same LP key** that later verifies
    it (Paystack `POST /transaction/initialize` with the order's reference and amount,
@@ -247,7 +260,9 @@ permanent, the ceilings stop a deployment whose slash can never happen in practi
 2. UNVERIFIABLE and PENDING are never treated as NOT_PAID. After the slash/refund window (§4.5:
    `T_retry` or `T_outage_max`), a buy order slashes the LP bond to the buyer; a sell order refunds
    the seller.
-3. A payment reference settles at most one order.
+3. A payment reference settles at most one order. Holds by construction: the reference is derived
+   from the order id, each verification checks only its own order's reference, and a settled order
+   is terminal, so no separate used-reference set is stored (D-020).
 4. An LP with open orders cannot withdraw their bond or change `secret_ref`.
 5. `open_buy_notional ≤ bond` for every LP at all times.
 6. Contract USDC balance ≥ sum of all bonds + liquidity + locked funds + pending releases +
@@ -267,8 +282,9 @@ permanent, the ceilings stop a deployment whose slash can never happen in practi
 12. A payment reference is unique across deployments (`opr-<deploy_tag>-<order_id>`).
 13. A sell order is PAID only if the payout went to the recipient the seller committed to, and each
     pawaPay `payoutId` settles at most one order.
-14. A paused LP gets no new orders; an LP's open USDC with new buyers never exceeds its
-    `new_buyer_exposure_max`.
+14. A paused LP gets no new orders; no new-buyer order is accepted that would take the LP's open
+    USDC with new buyers above its `new_buyer_exposure_max` (the LP may lower the limit below the
+    current exposure; that only blocks further new-buyer orders).
 
 ## 9. Out of scope (hackathon)
 - Real money on Paystack (live mode is banned for crypto businesses; we use test mode).

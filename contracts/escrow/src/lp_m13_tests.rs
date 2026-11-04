@@ -185,7 +185,7 @@ fn set_secret_ref_with_no_orders_clears_key_fp_and_emits() {
 #[should_panic(expected = "secret is locked while orders are open")]
 fn set_secret_ref_with_open_order_fails() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), USDC);
+    e.lock_for_buy(&acc(LP), USDC, false);
     as_(LP, 1);
     e.set_secret_ref(sref("other"));
 }
@@ -234,7 +234,7 @@ fn longest_profile_and_key_fp_fit_in_prepaid_storage() {
 #[should_panic(expected = "bond is locked while orders are open")]
 fn withdraw_bond_with_real_open_order_fails() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), USDC);
+    e.lock_for_buy(&acc(LP), USDC, false);
     as_(LP, 1);
     let _ = e.withdraw_bond(U128(USDC));
 }
@@ -244,7 +244,7 @@ fn withdraw_bond_with_real_open_order_fails() {
 #[test]
 fn lock_moves_liquidity_to_locked_and_counts_order() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), 4 * USDC);
+    e.lock_for_buy(&acc(LP), 4 * USDC, false);
     let lp = e.get_lp(acc(LP)).unwrap();
     assert_eq!((lp.liquidity.0, lp.locked.0, lp.open_orders), (16 * USDC, 4 * USDC, 1));
 }
@@ -252,8 +252,8 @@ fn lock_moves_liquidity_to_locked_and_counts_order() {
 #[test]
 fn lock_up_to_exactly_the_bond_is_allowed() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), 6 * USDC);
-    e.lock_for_buy(&acc(LP), 4 * USDC);
+    e.lock_for_buy(&acc(LP), 6 * USDC, false);
+    e.lock_for_buy(&acc(LP), 4 * USDC, false);
     assert_eq!(e.get_lp(acc(LP)).unwrap().locked.0, 10 * USDC);
 }
 
@@ -261,8 +261,8 @@ fn lock_up_to_exactly_the_bond_is_allowed() {
 #[should_panic(expected = "bond does not cover this order")]
 fn lock_beyond_the_bond_fails() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), 10 * USDC);
-    e.lock_for_buy(&acc(LP), 1);
+    e.lock_for_buy(&acc(LP), 10 * USDC, false);
+    e.lock_for_buy(&acc(LP), USDC, false); // 1 USDC is the quote minimum; the bond is full
 }
 
 #[test]
@@ -270,7 +270,7 @@ fn lock_beyond_the_bond_fails() {
 fn lock_beyond_liquidity_fails() {
     let mut e = ready();
     deposit(&mut e, 100 * USDC, "bond"); // bond 110, liquidity 20
-    e.lock_for_buy(&acc(LP), 21 * USDC);
+    e.lock_for_buy(&acc(LP), 21 * USDC, false);
 }
 
 #[test]
@@ -280,7 +280,7 @@ fn sell_side_lp_cannot_lock_for_buy() {
     deposit(&mut e, 10 * USDC, "bond");
     deposit(&mut e, 10 * USDC, "liquidity");
     e.lps.get_mut(&acc(LP)).unwrap().key_fp = Some("ab".repeat(32));
-    e.lock_for_buy(&acc(LP), USDC);
+    e.lock_for_buy(&acc(LP), USDC, false);
 }
 
 #[test]
@@ -288,14 +288,14 @@ fn sell_side_lp_cannot_lock_for_buy() {
 fn lock_without_key_fp_fails() {
     let mut e = ready();
     e.lps.get_mut(&acc(LP)).unwrap().key_fp = None;
-    e.lock_for_buy(&acc(LP), USDC);
+    e.lock_for_buy(&acc(LP), USDC, false);
 }
 
 #[test]
 fn unlock_back_to_liquidity_restores_balances() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), 4 * USDC);
-    e.unlock(&acc(LP), 4 * USDC, true);
+    e.lock_for_buy(&acc(LP), 4 * USDC, false);
+    e.unlock(&acc(LP), 4 * USDC, true, false);
     let lp = e.get_lp(acc(LP)).unwrap();
     assert_eq!((lp.liquidity.0, lp.locked.0, lp.open_orders), (20 * USDC, 0, 0));
 }
@@ -303,8 +303,8 @@ fn unlock_back_to_liquidity_restores_balances() {
 #[test]
 fn unlock_released_leaves_the_lp() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), 4 * USDC);
-    e.unlock(&acc(LP), 4 * USDC, false);
+    e.lock_for_buy(&acc(LP), 4 * USDC, false);
+    e.unlock(&acc(LP), 4 * USDC, false, false);
     let lp = e.get_lp(acc(LP)).unwrap();
     assert_eq!((lp.liquidity.0, lp.locked.0, lp.open_orders), (16 * USDC, 0, 0));
 }
@@ -313,8 +313,8 @@ fn unlock_released_leaves_the_lp() {
 #[should_panic(expected = "unlock exceeds locked")]
 fn unlock_more_than_locked_fails() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), USDC);
-    e.unlock(&acc(LP), 2 * USDC, true);
+    e.lock_for_buy(&acc(LP), USDC, false);
+    e.unlock(&acc(LP), 2 * USDC, true, false);
 }
 
 // ---- pause / resume (inv. 14, T28, T34) ----
@@ -325,21 +325,21 @@ fn paused_lp_cannot_lock_new_orders() {
     let mut e = ready();
     as_(LP, 1);
     e.pause_lp();
-    e.lock_for_buy(&acc(LP), USDC);
+    e.lock_for_buy(&acc(LP), USDC, false);
 }
 
 #[test]
 fn paused_lp_can_still_close_open_orders_and_resume() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), USDC);
+    e.lock_for_buy(&acc(LP), USDC, false);
     as_(LP, 1);
     e.pause_lp();
     assert_eq!(last_event().0, "lp_paused");
-    e.unlock(&acc(LP), USDC, true); // open order runs to the end
+    e.unlock(&acc(LP), USDC, true, false); // open order runs to the end
     as_(LP, 1);
     e.resume_lp();
     assert_eq!(last_event().0, "lp_resumed");
-    e.lock_for_buy(&acc(LP), USDC);
+    e.lock_for_buy(&acc(LP), USDC, false);
     assert_eq!(e.get_lp(acc(LP)).unwrap().open_orders, 1);
 }
 
@@ -464,7 +464,7 @@ fn set_secret_ref_to_the_same_ref_clears_key_fp() {
 #[should_panic(expected = "amount must be > 0")]
 fn lock_zero_fails() {
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), 0);
+    e.lock_for_buy(&acc(LP), 0, false);
 }
 
 #[test]
@@ -472,13 +472,13 @@ fn lock_zero_fails() {
 fn unlock_zero_fails() {
     // Would otherwise drop open_orders while USDC stays locked, unlocking withdraw_bond (inv. 4).
     let mut e = ready();
-    e.lock_for_buy(&acc(LP), USDC);
-    e.unlock(&acc(LP), 0, true);
+    e.lock_for_buy(&acc(LP), USDC, false);
+    e.unlock(&acc(LP), 0, true, false);
 }
 
 #[test]
 #[should_panic(expected = "no open orders")]
 fn unlock_with_no_open_orders_fails() {
     let mut e = ready();
-    e.unlock(&acc(LP), USDC, true);
+    e.unlock(&acc(LP), USDC, true, false);
 }
