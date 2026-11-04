@@ -13,9 +13,11 @@ use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 mod events;
 mod lp;
 mod orders;
+mod verdicts;
 pub use events::Event;
 pub use lp::{Lp, Pot, Quote, SecretRef, PROVIDERS};
 pub use orders::{Order, OrderState};
+pub use verdicts::{Verdict, VerifierOutput, VerifierResult};
 
 #[cfg(test)]
 mod lp_tests;
@@ -23,6 +25,8 @@ mod lp_tests;
 mod lp_m13_tests;
 #[cfg(test)]
 mod orders_tests;
+#[cfg(test)]
+mod verdicts_tests;
 
 #[near]
 #[derive(BorshStorageKey)]
@@ -35,6 +39,7 @@ enum StorageKey {
     BuyerReleased,
     LpOrderCount,
     BuyerOrderCount,
+    Claimable,
 }
 
 /// Which OutLayer program checks payments. Fixed at deploy (invariant 9, T21, T26).
@@ -139,6 +144,8 @@ pub struct Escrow {
     /// RELEASED buy orders per (lp, buyer); below `new_buyer_orders` the buyer is new with that LP
     /// (SPEC §4.1, D-020).
     buyer_released: LookupMap<(AccountId, AccountId), u32>,
+    /// USDC owed to accounts whose payout transfer failed (inv. 6); anyone can retry it.
+    claimable: LookupMap<AccountId, u128>,
 }
 
 /// First 8 hex chars of sha256(contract_id ":" init_block_height), height in decimal
@@ -221,6 +228,7 @@ impl Escrow {
             buyer_orders: LookupMap::new(StorageKey::BuyerOrders),
             buyer_order_count: LookupMap::new(StorageKey::BuyerOrderCount),
             buyer_released: LookupMap::new(StorageKey::BuyerReleased),
+            claimable: LookupMap::new(StorageKey::Claimable),
         }
     }
 

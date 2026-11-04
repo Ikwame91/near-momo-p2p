@@ -124,7 +124,13 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
      because the buyer may have approved on the phone and the money can still arrive (T35, D-017).
    - `UNVERIFIABLE` on auth error (401: key revoked/invalid), network/5xx error, timeout, 403 (WAF /
      outage, not LP fault), or malformed response.
-5. Callback (accepted only for this order's pending request):
+5. Callback `on_verdict(order_id, attempt, result)` (`#[private]` + caller check), accepted only
+   while VERIFYING and only for the order's current `attempt` (a late callback for an older claim
+   is ignored, T15). `claim(order_id)` is open to anyone while AWAITING_PAYMENT up to and including
+   `pay_deadline + t_grace`, or from UNVERIFIED at any time; each claim increments `attempt`.
+   `result` is the verifier output `{verdict, reference, key_fp, reason}` or `RunFailed` (OutLayer
+   `null` / no value / timeout). Implemented in M1.5 with this typed input; M2.2 parses OutLayer's
+   response into it:
    - `PAID` → record reference as used → release USDC to buyer (state `RELEASED`), or
      `RELEASE_PENDING` until `release_at` if a release delay applies; after that anyone may call
      `finalize_release(order_id)`. If the USDC transfer to the recipient fails (e.g. not registered

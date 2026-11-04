@@ -50,7 +50,7 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       only, `key_fp` must be set, `ghs_amount` = ceil formula, new-buyer counter (`new_buyer_orders`)
       + per-order cap + per-LP exposure cap (inv. 14), order views `get_order` / `list_orders_by_lp`
       / `list_orders_by_buyer` (the web app needs them). Check: tests.
-- [ ] M1.5 [must] (PR #10 review) `claim` accepted while `now <= pay_deadline + t_grace` (expire is
+- [x] M1.5 [must] (PR #10 review) `claim` accepted while `now <= pay_deadline + t_grace` (expire is
       `>`: no gap, no overlap); `buyer_released[(lp, buyer)]` += 1 only on final RELEASED (checked
       add); release delay keyed off `order.new_buyer`; claimable-balance entries are new storage:
       reserve it or fund it from the order's pre-charge.

@@ -393,7 +393,8 @@ fn refund_to(who: &str) -> Vec<NearToken> {
 
 /// Bytes charged beyond what open writes for a first order of (lp, buyer).
 fn later_bytes(lp: &str, buyer: &str) -> u64 {
-    ORDER_GROWTH_BYTES + RECORD_OVERHEAD + 1 + (4 + lp.len() as u64) + (4 + buyer.len() as u64) + 4
+    let claimable = RECORD_OVERHEAD + 1 + (4 + buyer.len() as u64) + 16;
+    ORDER_GROWTH_BYTES + claimable + RECORD_OVERHEAD + 1 + (4 + lp.len() as u64) + (4 + buyer.len() as u64) + 4
 }
 
 #[test]

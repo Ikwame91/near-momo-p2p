@@ -9,6 +9,41 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 — Session 4: M1.5 DONE (verdict handling, release, claimable payouts)
+Branch: `escrow/verdicts-and-release` (from main after PR #10).
+Done (`src/verdicts.rs`, `src/verdicts_tests.rs`):
+- `claim(order_id)`: anyone; AWAITING_PAYMENT until pay_deadline + t_grace inclusive (expire is
+  strictly after), or UNVERIFIED any time; increments `attempt`; state VERIFYING.
+- `on_verdict(order_id, attempt, result)` (#[private] + body check): stale attempt / not
+  VERIFYING / unknown order → ignored (returns false). key_fp mismatch → UNVERIFIED, LP_FAULT;
+  reference mismatch → UNVERIFIED, outage. PAID → release (or RELEASE_PENDING for a new buyer when
+  release_delay > 0). NOT_PAID → AWAITING_PAYMENT before the deadline + grace (streak reset), else
+  EXPIRED + unlock. PENDING / UNVERIFIABLE / RunFailed → UNVERIFIED, failures++, first/last
+  failure times, lp_fault only for auth_error / no_key / key mismatch (sticky in the streak).
+- `finalize_release` (anyone, after release_at). Release: unlock (USDC leaves the LP),
+  buyer_released[(lp, buyer)] += 1, ft_transfer to the buyer; `on_payout` credits a claimable
+  balance on failure; `withdraw_claimable(account)` (anyone, always pays the owner). Claimable
+  entry storage pre-charged at open.
+- Events: order_verifying, order_release_pending, order_released, order_not_paid,
+  order_unverified, claimable_credited.
+- Mutation check on verdicts.rs: 20 mutations (each check, each failure class, boundaries,
+  delay rule, streak reset, unlock direction, history, claimable, payout): all caught after adding
+  the exact-boundary NOT_PAID test.
+```
+$ cd contracts && cargo test
+     Running unittests src/lib.rs (target/debug/deps/openramp_escrow-d81469ffa25a38a7)
+test result: ok. 199 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.93s
+     Running unittests src/lib.rs (target/debug/deps/openramp_mock_ft-f436da86f5147f23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+$ cargo clippy --all-targets 2>&1 | grep -cE '^(warning|error)'
+0
+```
+Failed / blocked: test-setup issues only (borrow order in test helpers; mocked storage persists
+within a test, so loop tests reuse one escrow).
+Next: reviewer subagents on the PR, fix, merge; then M1.6 slash.
+
 ## 2026-11-04 — Session 4: PR #10 review fix-ups (D-020)
 Reviewers (security + code with 58 mutations) found no way to take USDC. Fixed:
 - Order indexes O(1) per order (LookupMap by position + counts) + count views; test proves the

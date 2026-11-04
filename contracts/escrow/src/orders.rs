@@ -129,7 +129,8 @@ impl Escrow {
 
         // What later steps will write, charged now (PR #10 review): the order's own growth, and
         // the (lp, buyer) history entry that the first release creates (M1.5).
-        let mut later = ORDER_GROWTH_BYTES;
+        // + a claimable-balance entry for the buyer, in case the payout transfer fails (M1.5).
+        let mut later = ORDER_GROWTH_BYTES + RECORD_OVERHEAD + 1 + str_len(buyer.as_str()) + 16;
         if released.is_none() {
             later += RECORD_OVERHEAD + 1 + str_len(lp.as_str()) + str_len(buyer.as_str()) + 4;
         }
