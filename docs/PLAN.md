@@ -82,7 +82,7 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       `OUTAGE` (`T_outage_max`) (T5, T8, T25, T30, T31, inv. 11, D-012). The contract-set OutLayer
       deposit/limits are already fixed in `Params.outlayer_call`; attaching them to the real call is
       M2.2. Check: tests with time travel.
-- [ ] M1.7 [must] Books check (inv. 6) as ONE test across all flows: contract balance ≥ owed (not =;
+- [x] M1.7 [must] Books check (inv. 6) as ONE test across all flows: contract balance ≥ owed (not =;
       stray mUSDC can be sent to the escrow). Check: test passes.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.

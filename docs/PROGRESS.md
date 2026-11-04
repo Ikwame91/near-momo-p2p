@@ -9,6 +9,19 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 — Session 4: M1.7 DONE (books check, one test)
+`books_tests::books_balance_covers_everything_owed_across_all_flows`: models the contract's USDC
+balance (in via ft_on_transfer, out via successful transfers) through deposits, stray tokens, 4
+orders (release, failed then successful payout, slash, NOT_PAID then release, expiry), LP
+withdrawals; checks balance ≥ owed (inv. 6) and locked ≤ bond (inv. 5) after every step, and at the
+end that only the stray tokens are unowed. Sanity: with the slash's bond debit removed it fails
+("inv. 6 broken after slash o1 ... balance 297000000 < owed 310000000").
+```
+$ cargo test -q
+test result: ok. 250 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.63s
+```
+Next: OutLayer wiring (verifier v2 modes, escrow claim → OutLayer, fingerprint, checkout).
+
 ## 2026-11-04 — Session 4: PR #12 review fix-ups (D-022)
 Reviewers: no fund-safety bug in the slash code, but a buyer-side attack (H1) and two fairness gaps.
 Fixed:

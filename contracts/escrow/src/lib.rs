@@ -29,6 +29,8 @@ mod orders_tests;
 mod verdicts_tests;
 #[cfg(test)]
 mod slash_tests;
+#[cfg(test)]
+mod books_tests;
 
 #[near]
 #[derive(BorshStorageKey)]
