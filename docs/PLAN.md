@@ -1,7 +1,22 @@
 # OpenRamp: Plan
 
-Status: v0.1 APPROVED by Kwame (Nov 1, 2026). Each task ≤ 2 h and has a check.
-`[K]` = Kwame must do it by hand (accounts, keys, funding). Feature freeze: Nov 12.
+Status: v0.2 (Nov 4, 2026, Kwame): compressed schedule, buy flow only. Each task ≤ 2 h and has a
+check. `[K]` = Kwame must do it by hand (accounts, keys, funding).
+
+## Schedule (Kwame, Nov 4) — this overrides the milestone dates below
+| Days | Goal |
+|---|---|
+| Wed Nov 4 – Fri Nov 6 | **Build done.** Buy flow only, end to end on testnet with real OutLayer + Paystack test mode. Order: M1.7 (one books test) → OutLayer wiring (M2.1, M2.1b, M2.2, M2.2b, M2.2c) → testnet deploy early (M2.8, M2.7) → created→PAID (M2.3) and slash (M2.4) shown to Kwame as soon as each works → web page (M4.1–M4.3) → README draft (M5.1). |
+| **Thu Nov 5, midday** | **Checkpoint:** if the real OutLayer → Paystack check is not working, tell Kwame immediately (do not keep pushing quietly). |
+| Sat Nov 7 – Sun Nov 8 | Polish and iteration. |
+| Mon Nov 9 – Tue Nov 10 | Full testing and fixes: M1.8 sandbox tests, M1.9 immutability tests, M5.2 fresh-clone run, M2.5 hostile review. |
+| **Wed Nov 11** | **Submit** (buffer before the Nov 14 deadline): M5.3–M5.5. |
+
+**Cut (buy flow only, Kwame Nov 4):** all of M3 (sell flow code: keep the pawaPay sandbox proof and
+design as "designed, tested in sandbox, not built"), M0.7/M0.8 Test C and M3.3 Intents settlement,
+M3.4 keeper, M1.10, M2.6 reproducible-build CI work beyond the pinned toolchain, M2.9, M4.4. M4.6
+demo trimmed to PAID, NOT_PAID and slash. D-022 stays (Kwame).
+Process: subagent reviews paused (D-019 update); Claude self-reviews with tests + mutation checks.
 
 ## M0 Feasibility (Nov 1–3): prove the three risky integrations
 - [ ] M0.1 [K] Accounts: Paystack test account (GH), NEAR testnet account, OutLayer CLI login,
@@ -67,8 +82,8 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       `OUTAGE` (`T_outage_max`) (T5, T8, T25, T30, T31, inv. 11, D-012). The contract-set OutLayer
       deposit/limits are already fixed in `Params.outlayer_call`; attaching them to the real call is
       M2.2. Check: tests with time travel.
-- [ ] M1.7 [must] Balance accounting invariant (inv. 6) checked after every test: contract balance
-      ≥ owed (not =; stray mUSDC can be sent to the escrow). Check: tests.
+- [ ] M1.7 [must] Books check (inv. 6) as ONE test across all flows: contract balance ≥ owed (not =;
+      stray mUSDC can be sent to the escrow). Check: test passes.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
 - [ ] M1.10 [nice] Anti-griefing for experienced buyers (T7): small order fee paid to the LP on
