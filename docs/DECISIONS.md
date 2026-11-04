@@ -246,7 +246,7 @@ Status: accepted (Kwame: "you can merge PRs going forward"; "after every PR you 
 review")
 Decision: for every PR, Claude runs `cargo test`, clippy and the build, opens the PR, runs reviewer
 subagents (security + code/test), fixes their findings with tests, re-runs everything, waits for
-GitHub checks, then merges. Kwame reviews afterwards. This replaces the AGENTS.md "ask before
+GitHub checks, then merges. Kwame reviews afterwards. Update (Nov 4, Kwame): subagent reviews are paused to save credits; Claude reviews its own PRs with tests and mutation checks until Kwame says otherwise. This replaces the AGENTS.md "ask before
 merging unreviewed money logic" rule in practice; the AGENTS.md wording should be updated with
 Kwame's approval of the diff.
 
@@ -284,3 +284,20 @@ Status: accepted (both reviewers flagged the same High)
 Alternatives: raise the minimum callback gas to ~80 TGas (rejected: still fragile, and any other
 panic would still freeze the order); always RELEASE_PENDING with `release_at = now` (works, but
 needs a second call anyway, like the claimable balance, with one more state to reason about).
+
+## D-022 Pending after the grace window is NOT_PAID; slash windows measured fairly (PR #12 review) (Nov 4, 2026)
+Status: accepted by Claude for safety, **Kwame to confirm** (it changes D-017 item 1 for buy orders)
+- PENDING from a check claimed after `pay_deadline + t_grace` is NOT_PAID. Reason: a buyer could
+  start a MoMo charge, never approve it, and keep every check PENDING until the outage window
+  slashed the LP, with no cedis paid; the LP's own checks would say PENDING too. The old rule also
+  protected nobody: a charge still pending after the deadline could only end as a late payment,
+  which is NOT_PAID anyway. Ama's late approval stays protected: PENDING from a check claimed up
+  to `pay_deadline + t_grace` is still an outage, and the verifier counts payments up to
+  `pay_deadline + t_grace` as on time.
+- The `t_retry` window counts from the streak's first LP_FAULT (not from an older outage failure),
+  so an LP's first fault never slashes instantly.
+- A stuck-VERIFYING timeout failure is stamped when the answer was due (`claimed_at +
+  VERIFY_TIMEOUT`), and only completes the window if the stuck check itself started after the
+  window; otherwise a fresh check starts. A caller cannot pick the time that completes the window.
+Alternatives: keep PENDING as an outage and cap it in the verifier only (rejected: the verifier is a
+plug-in; the escrow must hold the rule itself).

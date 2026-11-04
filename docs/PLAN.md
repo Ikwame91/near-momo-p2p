@@ -58,20 +58,22 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       UNVERIFIABLE / PENDING, replay protection, reference + `key_fp` must match, callback carries
       (order_id, attempt) and stale ones are ignored (inv. 1–3, 10, T15), `finalize_release`,
       claimable balances for failed transfers + `withdraw_claimable` (D-017). Check: tests.
-- [ ] M1.6 [must] (PR #11 review) an LP must not be able to dodge a due slash by racing `claim`: slash
+- [x] M1.6 [must] (PR #11 review) an LP must not be able to dodge a due slash by racing `claim`: slash
       automatically inside the failure branch of `apply_verdict` once the window is met, and/or
       allow `slash` from VERIFYING when the conditions already held at the last failure.
-- [ ] M1.6 [must] (PR #9 review) the slash debits `bond` in the same internal step that unlocks the
+- [x] M1.6 [must] (PR #9 review) the slash debits `bond` in the same internal step that unlocks the
       order; test `locked <= bond` after a slash with other orders open.
       Retry window + slash with `min_failed_attempts`, failure classes `LP_FAULT` (`T_retry`) /
-      `OUTAGE` (`T_outage_max`), contract-set OutLayer deposit/limits (T5, T8, T25, T30, T31,
-      inv. 11, D-012). Check: tests with time travel.
+      `OUTAGE` (`T_outage_max`) (T5, T8, T25, T30, T31, inv. 11, D-012). The contract-set OutLayer
+      deposit/limits are already fixed in `Params.outlayer_call`; attaching them to the real call is
+      M2.2. Check: tests with time travel.
 - [ ] M1.7 [must] Balance accounting invariant (inv. 6) checked after every test: contract balance
       ≥ owed (not =; stray mUSDC can be sent to the escrow). Check: tests.
 - [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
 - [ ] M1.10 [nice] Anti-griefing for experienced buyers (T7): small order fee paid to the LP on
       expiry, or a per-buyer limit on concurrent open orders.
+- [ ] M1.8 (PR #12 review) also measure the gas of the slash-inside-the-verdict path, next to PAID.
 - [ ] M1.8 Sandbox integration test (near-workspaces) of a full buy flow with mock verifier. Also
       prove what unit tests cannot: `#[private]` callbacks reject strangers, double init rejected,
       NEP-141 refund on a rejected deposit, failed withdrawal (receiver unregistered) is re-credited,
@@ -87,6 +89,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
 - [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
       verdict logic + 15 tests): `PaymentProvider` trait, Paystack adapter, verdict mapping, unit tests
       with recorded test-mode responses. Check: tests.
+- [ ] M2.1b [must] (PR #12 review) verifier: map only HTTP 401 to `auth_error` (403 is an outage, test it);
+      check amount ≥ expected, currency GHS and channel `mobile_money` before PAID **and** before
+      PENDING; treat `paid_at ≤ pay_deadline + t_grace` as on time (the escrow passes that deadline);
+      probe whether a buyer can create the Paystack transaction for our reference with the public key.
 - [ ] M2.1b [must] Verifier modes: `fingerprint` (returns `key_fp`, either provider), `checkout`
       (Paystack initialize: GHS, mobile_money only, synthetic email), `verify` output carries
       `key_fp`; `pending` reason; only 401 = `auth_error`, 403 and unknown = outage (D-017).
@@ -97,6 +103,7 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       Check: tests incl. the stale-callback race.
 - [ ] M2.2b [must] Escrow `request_checkout(order_id)` → checkout mode → callback stores
       `authorization_url` (D-017). Check: tests + testnet run.
+- [ ] M2.2 (PR #12 review) refund the OutLayer fee when `claim` returns 0 (it slashed instead).
 - [ ] M2.2 (PR #11 review) the OutLayer callback `on_verdict_result(order_id, attempt)` (args built in the
       contract at claim time, never from the payload) reads the raw bytes with
       `promise_result_checked`, maps anything unparseable / unknown to `RunFailed` (never panics),
@@ -150,6 +157,8 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
 - [x] ~~S1 `agent-api/` x402 endpoint~~ DROPPED (D-010): needs real payouts.
 
 ## M5 Submission (Nov 12–14) — feature freeze Nov 12
+- [ ] M5.1 (PR #12 review) README: a buyer-caused provider outage lasting the whole window can still
+      slash an LP whose buyer never paid (residual risk, D-012/T31).
 - [ ] M5.1 README for judges (PROMPTS.md §9): do X → see Y, mermaid diagram, test-mode disclosure,
       payouts on the pawaPay sandbox and why (D-010, D-011), a buyer whose MoMo charge is pending
       must claim within the grace window (otherwise anyone can expire the order), slash timing incl. the 72 h outage

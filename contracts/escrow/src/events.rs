@@ -60,4 +60,7 @@ pub enum Event {
     /// A payout transfer failed; the amount is now claimable by `account`.
     #[event_version("1.0.0")]
     ClaimableCredited { account: AccountId, amount: U128 },
+    /// The LP's bond paid the buyer (claimable); `lp_fault` says which window applied.
+    #[event_version("1.0.0")]
+    OrderSlashed { order_id: u64, lp: AccountId, buyer: AccountId, amount: U128, lp_fault: bool },
 }

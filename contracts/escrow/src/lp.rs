@@ -317,6 +317,18 @@ impl Escrow {
         }
     }
 
+    /// Slash for one buy order (M1.6, PLAN "(PR #9 review)"): in ONE step the order's lock closes
+    /// back to the LP's liquidity and the same amount is taken from the bond, so `locked <= bond`
+    /// keeps holding (inv. 5) and the bond, not the liquidity, pays the buyer.
+    pub(crate) fn slash_lp(&mut self, lp_id: &AccountId, amount: u128, new_buyer: bool) {
+        self.unlock(lp_id, amount, true, new_buyer);
+        let lp = self.lps.get_mut(lp_id).unwrap_or_else(|| env::panic_str("not a registered LP"));
+        // The bond rule guaranteed bond >= locked >= amount when the order opened, and the bond
+        // cannot be withdrawn while orders are open, so this cannot fail; check anyway (fail closed).
+        require!(lp.bond.0 >= amount, "bond does not cover the slash");
+        lp.bond.0 -= amount;
+    }
+
     fn lp_or_panic(&self, id: &AccountId) -> Lp {
         match self.lps.get(id) {
             Some(lp) => lp.clone(),
