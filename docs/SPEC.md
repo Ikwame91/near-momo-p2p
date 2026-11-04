@@ -121,8 +121,13 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
    - `NOT_PAID` if Paystack answers clearly and any of the above fails: not found, `failed`,
      `abandoned`, `reversed`, short amount, wrong currency, late.
    - `PENDING` (verifier reason `pending`) if the charge is still in flight (`pending`, `ongoing`,
-     `processing`, `queued`, `send_otp`, `pay_offline`, …). Treated as `OUTAGE`, never as NOT_PAID,
-     because the buyer may have approved on the phone and the money can still arrive (T35, D-017).
+     `processing`, `queued`, `send_otp`, `pay_offline`, …). From a check claimed up to
+     `pay_deadline + T_grace` it is an `OUTAGE`, never NOT_PAID, because the buyer may have approved
+     on the phone and the money can still arrive (T35, D-017). From a check claimed **after**
+     `pay_deadline + T_grace` it is **NOT_PAID** (D-022): such a check can only find a late payment,
+     and otherwise a buyer could keep a charge pending to slash the LP without paying. The verifier
+     treats payments up to `pay_deadline + T_grace` as on time, so a late approval inside the grace
+     window still counts.
    - `UNVERIFIABLE` on auth error (401: key revoked/invalid), network/5xx error, timeout, 403 (WAF /
      outage, not LP fault), or malformed response.
 5. Callback `on_verdict(order_id, attempt, result)` (`#[private]` + caller check), accepted only
@@ -169,7 +174,11 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
      due (inside the verdict callback, or the stuck-timeout re-claim), so an LP cannot dodge it by
      racing to re-claim; `slash(order_id)` is a public backstop. Due = the order is `UNVERIFIED`
      **and** has at least `min_failed_attempts` failed results, the first and last at least the
-     window apart (measured on failure times). In one step the order's lock closes back to the LP's
+     window apart (measured on failure times; the `T_retry` window counts from the streak's first
+     LP_FAULT, the `T_outage_max` window from its first failure, D-022). A missing answer (stuck
+     VERIFYING) is stamped when it was due (`claimed_at + VERIFY_TIMEOUT`) and only completes the
+     window if the stuck check itself started after the window; otherwise a fresh check starts. In
+     one step the order's lock closes back to the LP's
      liquidity and the same amount is taken from the bond (`locked ≤ bond` keeps holding); the
      buyer's claimable balance gets `usdc_amount`. State `SLASHED`; event `order_slashed`.
 6. Optional: buyer withdraws released USDC to another chain via `settlement/` (1Click).
@@ -257,7 +266,7 @@ flight per order. A callback for a request that is not the order's current one i
 | `new_buyer_cap` | max USDC per order for a new buyer (§4.1) | 50 | 50 |
 | `new_buyer_orders` | RELEASED buy orders after which a buyer is no longer new (1–100) | 3 | 3 |
 | `release_delay` | delay before release for new buyers (reversal protection) | 1 h | 0 |
-| `min_failed_attempts` | failed verifications needed (spread over the window) before a slash; 2–10 (1 could never span a window) | 3 | 2 |
+| `min_failed_attempts` | failed verifications needed before a slash, the last one at or after the window's end; 2–10 (1 could never span a window). The failures need not be spread out: the LP's defence is that anyone can re-check at any time and a clear NOT_PAID ends the streak | 3 | 2 |
 | `outlayer_call` | per verification: `fee` (yoctoNEAR deposit), `gas_tgas` (100–250), `callback_gas_tgas` (≥ 10; gas + callback ≤ 280), `max_instructions` (≤ 500e9), `max_memory_mb` (≤ 4096), `max_execution_seconds` (≤ 180) | fee from `estimate_execution_cost` | fee 0.01 NEAR, 200 + 30 TGas, 1e9 instr, 128 MB, 20 s |
 | `new_buyer_exposure_max` | per LP, set by the LP: total open USDC with new buyers | LP's choice | LP's choice |
 

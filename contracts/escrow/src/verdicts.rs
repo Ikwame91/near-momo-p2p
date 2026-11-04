@@ -75,7 +75,9 @@ impl Escrow {
                 let since = order.claimed_at.expect("set by claim").0;
                 let stuck_after = since.checked_add(VERIFY_TIMEOUT_NS).unwrap_or_else(|| env::panic_str("overflow"));
                 require!(now > stuck_after, "a verification is already in flight");
-                record_failure(order, now, false);
+                // Stamp the missing answer when it was DUE, not when someone re-claims (PR #12
+                // review): otherwise a caller could pick the time that completes the window.
+                record_failure(order, stuck_after, false);
                 Event::OrderUnverified {
                     order_id,
                     attempt: order.attempt,
@@ -83,8 +85,11 @@ impl Escrow {
                     lp_fault: order.lp_fault,
                 }
                 .emit();
-                // The missing answer may complete the slash window: slash instead of re-verifying.
-                if self.slash_if_due(order_id) {
+                // A missing answer only completes the slash window if the stuck check itself started
+                // after the window was met; otherwise a fresh check, run now, decides (PR #12 review).
+                let (t_retry, t_outage) = (self.params.t_retry_ns, self.params.t_outage_max_ns);
+                let started_after_window = due_at(order, t_retry, t_outage).is_some_and(|d| since >= d);
+                if started_after_window && self.slash_if_due(order_id) {
                     return 0;
                 }
                 let order = self.orders.get_mut(&order_id).expect("order exists");
@@ -126,6 +131,12 @@ impl Escrow {
             return false; // a late or duplicate callback for an older request (T15)
         }
         let (reference, lp_id) = (order.reference.clone(), order.lp.clone());
+        // D-022: a check that started after pay_deadline + t_grace can only find a late payment, so
+        // PENDING there is NOT_PAID; otherwise a buyer could keep a charge pending and slash an LP
+        // without paying (PR #12 review). Before that, PENDING stays an outage (Ama approving late).
+        let late_check = order.claimed_at.is_some_and(|c| {
+            c.0 > order.pay_deadline.0.checked_add(grace).unwrap_or_else(|| env::panic_str("overflow"))
+        });
         let key_fp = self.lps.get(&lp_id).and_then(|l| l.key_fp.clone());
 
         // Decide the outcome; anything that does not match this order is UNVERIFIABLE (inv. 10).
@@ -140,6 +151,7 @@ impl Escrow {
                     match o.verdict {
                         Verdict::Paid => Outcome::Paid,
                         Verdict::NotPaid => Outcome::NotPaid,
+                        Verdict::Pending if late_check => Outcome::NotPaid,
                         Verdict::Pending => Outcome::Failure { lp_fault: false },
                         Verdict::Unverifiable => {
                             Outcome::Failure { lp_fault: LP_FAULT_REASONS.contains(&o.reason.as_str()) }
@@ -167,6 +179,7 @@ impl Escrow {
                 order.first_failure_at = None;
                 order.last_failure_at = None;
                 order.lp_fault = false;
+                order.first_lp_fault_at = None;
                 // Expire only if the check itself started after the deadline (any payment found
                 // then would be late anyway). A check that started earlier may have been answered
                 // late: give the buyer a fresh grace period to claim again (PR #11 review).
@@ -220,14 +233,26 @@ impl Escrow {
     }
 }
 
-/// The slash rule (D-012). Pure, so it is easy to test and to reason about.
+/// When a failure completes the slash window (D-012, PR #12 review): `first_failure + t_outage_max`,
+/// or `first_lp_fault + t_retry` if the streak has an LP_FAULT, whichever is earlier. `None` before
+/// the first failure.
+pub fn due_at(order: &crate::Order, t_retry: u64, t_outage: u64) -> Option<u64> {
+    let first = order.first_failure_at?.0;
+    let outage_due = first.saturating_add(t_outage);
+    let lp_due = order.first_lp_fault_at.map_or(u64::MAX, |f| f.0.saturating_add(t_retry));
+    Some(outage_due.min(lp_due))
+}
+
+/// The slash rule. Pure, so it is easy to test and to reason about: UNVERIFIED, at least
+/// `min_failures` failures, and the last failure at or after `due_at`. The failures need not be
+/// spread out; the LP's defence is that anyone (incl. the LP) can re-check at any time and a clear
+/// NOT_PAID ends the streak.
 pub fn slash_due(order: &crate::Order, min_failures: u8, t_retry: u64, t_outage: u64) -> bool {
     if order.state != OrderState::Unverified || order.failures < min_failures {
         return false;
     }
-    let (Some(first), Some(last)) = (order.first_failure_at, order.last_failure_at) else { return false };
-    let window = if order.lp_fault { t_retry } else { t_outage };
-    last.0.saturating_sub(first.0) >= window
+    let (Some(due), Some(last)) = (due_at(order, t_retry, t_outage), order.last_failure_at) else { return false };
+    last.0 >= due
 }
 
 /// Count one failed verification (UNVERIFIED): failures++, first time kept, last time updated,
@@ -240,12 +265,16 @@ fn record_failure(order: &mut crate::Order, now: u64, lp_fault: bool) {
     }
     order.last_failure_at = Some(U64(now));
     order.lp_fault |= lp_fault;
+    if lp_fault && order.first_lp_fault_at.is_none() {
+        order.first_lp_fault_at = Some(U64(now));
+    }
 }
 
 #[near]
 impl Escrow {
-    /// Slash an UNVERIFIED order whose window is met (normally this already happened inside the
-    /// verdict step; this is the backstop). Anyone may call it.
+    /// Defensive backstop: slash an UNVERIFIED order whose window is met. Today this can never
+    /// succeed, because every write that can make a slash due is followed by `slash_if_due` in the
+    /// same step; it stays so a future code path cannot leave a due slash undone. Anyone may call it.
     pub fn slash(&mut self, order_id: u64) {
         require!(self.orders.get(&order_id).is_some(), "no such order");
         require!(self.slash_if_due(order_id), "slash conditions not met");

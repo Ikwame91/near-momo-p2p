@@ -626,15 +626,27 @@ fn not_paid_resets_the_whole_streak() {
 }
 
 #[test]
-fn pending_after_the_deadline_stays_unverified_never_expired() {
-    // T35: a charge still pending after deadline + grace must not expire the order. Both failures
-    // are within the 6-min demo outage window (12 min apart would correctly slash, see M1.6 tests).
+fn pending_inside_the_grace_window_is_an_outage() {
+    // Ama approved late on her phone: a check started up to pay_deadline + t_grace that sees
+    // PENDING keeps the order alive (outage), never NOT_PAID.
+    let mut e = with_order();
+    { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, LAST_CLAIM, r) };
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.state, o.failures), (OrderState::Unverified, 1));
+    assert_eq!(e.get_lp(acc(LP)).unwrap().locked.0, 10 * USDC);
+}
+
+#[test]
+fn pending_from_a_check_started_after_grace_is_not_paid() {
+    // D-022 (PR #12 review, changes D-017 item 1 for buy orders): such a check can only find a
+    // late payment, so PENDING there is NOT_PAID; a buyer cannot keep a charge pending to slash
+    // an LP without paying.
     let mut e = with_order();
     { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, DEADLINE, r) };
     { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, LAST_CLAIM + 1, r) };
-    let o = e.get_order(0).unwrap();
-    assert_eq!((o.state, o.failures), (OrderState::Unverified, 2));
-    assert_eq!(e.get_lp(acc(LP)).unwrap().locked.0, 10 * USDC);
+    assert_eq!(state(&e), OrderState::Expired);
+    let lp = e.get_lp(acc(LP)).unwrap();
+    assert_eq!((lp.locked.0, lp.liquidity.0, lp.bond.0), (0, 300 * USDC, 200 * USDC), "no slash");
     assert!(ft_transfers().is_empty());
     assert_eq!(e.get_claimable(acc(BUYER)).0, 0);
 }

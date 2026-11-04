@@ -12,8 +12,8 @@ pub const MAX_CHECKOUT_URL: usize = 256;
 /// (`num_extra_bytes_record` in the protocol's storage config).
 pub const RECORD_OVERHEAD: u64 = 40;
 /// Bytes the order itself can still grow by after open, pre-charged now (PR #10 review): the
-/// checkout URL (`None` 1 byte → `Some` 1 + 4 + 256) and five `Option<U64>` (1 → 9 bytes each).
-pub const ORDER_GROWTH_BYTES: u64 = (4 + MAX_CHECKOUT_URL as u64) + 5 * 8;
+/// checkout URL (`None` 1 byte → `Some` 1 + 4 + 256) and six `Option<U64>` (1 → 9 bytes each).
+pub const ORDER_GROWTH_BYTES: u64 = (4 + MAX_CHECKOUT_URL as u64) + 6 * 8;
 
 /// Buy-order states (SPEC §6). Borsh stores the variant index: append only, never reorder.
 #[near(serializers = [json, borsh])]
@@ -66,6 +66,9 @@ pub struct Order {
     /// Extended claim window after a NOT_PAID for a check that started before the deadline (a slow
     /// answer must not expire an order paid on time). `None` = `pay_deadline + t_grace`.
     pub claim_until: Option<U64>,
+    /// First LP_FAULT failure of the streak: the short `t_retry` window counts from here, not from
+    /// an earlier outage failure (PR #12 review, D-022).
+    pub first_lp_fault_at: Option<U64>,
 }
 
 impl Order {
@@ -138,6 +141,7 @@ impl Escrow {
             release_at: None,
             claimed_at: None,
             claim_until: None,
+            first_lp_fault_at: None,
         };
         self.orders.insert(id, order.clone());
         self.index_push(&lp, &buyer, id);

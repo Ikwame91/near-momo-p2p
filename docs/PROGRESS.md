@@ -9,6 +9,34 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 — Session 4: PR #12 review fix-ups (D-022)
+Reviewers: no fund-safety bug in the slash code, but a buyer-side attack (H1) and two fairness gaps.
+Fixed:
+- PENDING from a check claimed after pay_deadline + t_grace → NOT_PAID (D-022, Kwame to confirm).
+- Stuck-timeout failure stamped at claimed_at + VERIFY_TIMEOUT; only completes the window if the
+  stuck check started after it (`due_at`).
+- `first_lp_fault_at` (storage pre-charged): t_retry counts from the first LP_FAULT.
+- 12 edge tests from the code review adopted after reading them (bond == amount, experienced
+  buyer, paused LP, saturating failures, claim_until extension, timeout clocks, existing
+  claimable, double public slash, outage event flag, NOT_PAID resets lp_fault); one adapted to
+  the new stuck-timeout rule. Event sequences on both timeout paths asserted.
+- 3 older tests rewritten because their rule deliberately changed (stuck timeout, LP-fault window,
+  pending after grace); none weakened.
+- Mutation check on the new logic: 13 mutations, all caught. Clippy nit fixed.
+- Process: subagent reviews paused at Kwame's request (D-019 update).
+```
+$ cd contracts && cargo test
+     Running unittests src/lib.rs (target/debug/deps/openramp_escrow-d81469ffa25a38a7)
+test result: ok. 249 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.66s
+     Running unittests src/lib.rs (target/debug/deps/openramp_mock_ft-f436da86f5147f23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+$ cargo clippy --all-targets 2>&1 | grep -cE '^(warning|error)'
+0
+```
+Next: merge PR #12; M1.7 books invariant.
+
 ## 2026-11-04 — Session 4: M1.6 DONE (slash)
 Branch: `escrow/slash` (from main after PR #11).
 Done:

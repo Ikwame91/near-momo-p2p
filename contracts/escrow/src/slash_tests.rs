@@ -133,10 +133,16 @@ fn outage_streak_needs_the_longer_window() {
 }
 
 #[test]
-fn an_lp_fault_in_an_outage_streak_switches_to_the_short_window() {
+fn an_lp_fault_after_outages_gets_t_retry_from_its_first_fault() {
+    // PR #12 review / D-022: the short window counts from the first LP_FAULT, not from an older
+    // outage failure, so an LP's first fault never slashes instantly.
     let mut e = demo();
     outage(&mut e, T0 + MIN);
-    lp_fault(&mut e, T0 + MIN + T_RETRY);
+    lp_fault(&mut e, T0 + MIN + T_RETRY); // first LP fault at T0 + 4 min
+    assert_eq!(state(&e), OrderState::Unverified);
+    lp_fault(&mut e, T0 + MIN + 2 * T_RETRY - 1);
+    assert_eq!(state(&e), OrderState::Unverified);
+    lp_fault(&mut e, T0 + MIN + 2 * T_RETRY); // t_retry after the first LP fault
     assert_eq!(state(&e), OrderState::Slashed);
 }
 
@@ -296,16 +302,36 @@ fn public_slash_of_unknown_order_fails() {
 // ---- stuck VERIFYING path ----
 
 #[test]
-fn a_missing_answer_can_complete_the_slash_window() {
-    // First failure at T1; then a claim whose answer never comes. The timeout re-claim records an
-    // outage failure 6+ min later, which meets the outage window: slash instead of re-verifying.
+fn a_missing_answer_for_a_check_started_before_the_window_does_not_slash() {
+    // PR #12 review: the stuck check was started before the window was met, so it cannot complete
+    // it; the missing answer is stamped when it was due and a fresh check is started instead.
     let mut e = demo();
     outage(&mut e, T0 + MIN);
     at("anyone.testnet", T0 + 2 * MIN);
     e.claim(0); // never answered
     at("anyone.testnet", T0 + 2 * MIN + VERIFY_TIMEOUT_NS + 1);
+    let attempt = e.claim(0);
+    assert!(attempt > 0, "a fresh verification, not a slash");
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.state, o.failures), (OrderState::Verifying, 2));
+    assert_eq!(o.last_failure_at.unwrap().0, T0 + 2 * MIN + VERIFY_TIMEOUT_NS, "stamped when due");
+    let names: Vec<String> = get_logs().iter().filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| serde_json::from_str::<Value>(j).unwrap()["event"].as_str().unwrap().to_string()).collect();
+    assert_eq!(names, vec!["order_unverified", "order_verifying"]);
+}
+
+#[test]
+fn a_missing_answer_for_a_check_started_after_the_window_slashes() {
+    let mut e = demo();
+    outage(&mut e, T0 + MIN);
+    at("anyone.testnet", T0 + MIN + T_OUTAGE);
+    e.claim(0); // started after the outage window was met; never answered
+    at("anyone.testnet", T0 + MIN + T_OUTAGE + VERIFY_TIMEOUT_NS + 1);
     assert_eq!(e.claim(0), 0, "0 = slashed instead of a new attempt");
     assert_eq!(state(&e), OrderState::Slashed);
+    let names: Vec<String> = get_logs().iter().filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| serde_json::from_str::<Value>(j).unwrap()["event"].as_str().unwrap().to_string()).collect();
+    assert_eq!(names, vec!["order_unverified", "order_slashed"]);
 }
 
 // ---- the pure rule ----
@@ -322,4 +348,177 @@ fn slash_due_requires_unverified_state() {
     assert!(!slash_due(&o, 2, T_RETRY, T_OUTAGE));
     o.state = OrderState::Released;
     assert!(!slash_due(&o, 2, T_RETRY, T_OUTAGE));
+}
+
+// ---- edge cases from the PR #12 code review ----
+
+fn pause(e: &mut Escrow) {
+    testing_env!(VMContextBuilder::new()
+        .current_account_id(acc(ME))
+        .predecessor_account_id(acc(LP))
+        .attached_deposit(NearToken::from_yoctonear(1))
+        .block_timestamp(T0)
+        .build());
+    e.pause_lp();
+}
+
+#[test]
+fn edge_experienced_buyer_slash_keeps_other_new_buyer_exposure() {
+    let mut e = demo(); // order 0: BUYER, new
+    // order 1: an experienced buyer
+    e.buyer_released.insert((acc(LP), acc("exp.testnet")), 3);
+    at("exp.testnet", T0);
+    let o = e.open_buy_order(acc(LP), U128(10 * USDC), None);
+    assert!(!o.new_buyer);
+    assert_eq!(e.get_lp(acc(LP)).unwrap().new_buyer_open.0, 10 * USDC);
+    let r = unverifiable(&e, 1, "auth_error");
+    fail(&mut e, 1, T0 + MIN, r);
+    let r = unverifiable(&e, 1, "auth_error");
+    fail(&mut e, 1, T0 + MIN + T_RETRY, r);
+    assert_eq!(e.get_order(1).unwrap().state, OrderState::Slashed);
+    let lp = e.get_lp(acc(LP)).unwrap();
+    assert_eq!((lp.new_buyer_open.0, lp.locked.0, lp.bond.0), (10 * USDC, 10 * USDC, 10 * USDC));
+}
+
+#[test]
+fn edge_slash_while_paused() {
+    let mut e = demo();
+    pause(&mut e);
+    lp_fault(&mut e, T0 + MIN);
+    lp_fault(&mut e, T0 + MIN + T_RETRY);
+    assert_eq!(state(&e), OrderState::Slashed);
+    let lp = e.get_lp(acc(LP)).unwrap();
+    assert!(lp.paused);
+    assert_eq!((lp.bond.0, lp.open_orders), (10 * USDC, 0));
+}
+
+#[test]
+fn edge_failures_saturate_at_255_and_still_slash() {
+    let mut e = demo();
+    lp_fault(&mut e, T0 + MIN);
+    e.orders.get_mut(&0).unwrap().failures = 255;
+    lp_fault(&mut e, T0 + MIN + 1);
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.state, o.failures), (OrderState::Unverified, 255));
+    lp_fault(&mut e, T0 + MIN + T_RETRY);
+    assert_eq!(state(&e), OrderState::Slashed);
+}
+
+#[test]
+fn edge_slash_after_claim_until_extension() {
+    let mut e = demo();
+    // claim before the deadline, NotPaid answered after deadline + grace: claim_until extended.
+    at("anyone.testnet", T0 + MIN);
+    let a = e.claim(0);
+    let late = T0 + 13 * MIN; // > pay_deadline (10) + grace (2)
+    at(ME, late);
+    let r = VerifierResult::Output(VerifierOutput { verdict: Verdict::NotPaid, reference: reference(&e, 0), key_fp: fp(), reason: "not_found".into() });
+    e.on_verdict(0, a, r);
+    let o = e.get_order(0).unwrap();
+    assert_eq!(o.state, OrderState::AwaitingPayment);
+    assert_eq!(o.claim_until.unwrap().0, late + 2 * MIN);
+    lp_fault(&mut e, late + MIN);
+    lp_fault(&mut e, late + MIN + T_RETRY);
+    assert_eq!(state(&e), OrderState::Slashed);
+}
+
+#[test]
+fn edge_timeout_from_awaiting_counts_then_second_timeout_slashes() {
+    let mut e = demo();
+    at("anyone.testnet", T0 + MIN);
+    assert_eq!(e.claim(0), 1);
+    let t1 = T0 + MIN + VERIFY_TIMEOUT_NS + 1;
+    at("anyone.testnet", t1);
+    assert_eq!(e.claim(0), 2);
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.state, o.failures, o.claimed_at.unwrap().0), (OrderState::Verifying, 1, t1));
+    assert_eq!(o.last_failure_at.unwrap().0, T0 + MIN + VERIFY_TIMEOUT_NS, "stamped when due");
+    // The first failure is stamped at T0 + MIN + VERIFY_TIMEOUT_NS, so the 6-min outage window ends
+    // after t1. The second stuck check started at t1, before that: its timeout counts a failure but
+    // cannot complete the window, so a fresh check starts.
+    let t2 = t1 + VERIFY_TIMEOUT_NS + 1;
+    at("anyone.testnet", t2);
+    assert_eq!(e.claim(0), 3);
+    // Third stuck check, started at t2 (after the window): its timeout completes it and slashes.
+    at("anyone.testnet", t2 + VERIFY_TIMEOUT_NS + 1);
+    assert_eq!(e.claim(0), 0);
+    assert_eq!(state(&e), OrderState::Slashed);
+}
+
+#[test]
+#[should_panic(expected = "a verification is already in flight")]
+fn edge_timeout_reclaim_restarts_the_in_flight_clock() {
+    let mut e = demo();
+    at("anyone.testnet", T0 + MIN);
+    e.claim(0);
+    let t1 = T0 + MIN + VERIFY_TIMEOUT_NS + 1;
+    at("anyone.testnet", t1);
+    e.claim(0);
+    at("anyone.testnet", t1 + 1);
+    e.claim(0);
+}
+
+#[test]
+fn edge_slash_with_bond_exactly_the_order_amount() {
+    let mut e = demo();
+    // bond 20: second order of 10 makes locked == bond; slash order 1 and then order 0.
+    at("kofi.testnet", T0);
+    e.open_buy_order(acc(LP), U128(10 * USDC), None);
+    lp_fault(&mut e, T0 + MIN);
+    lp_fault(&mut e, T0 + MIN + T_RETRY);
+    let r = unverifiable(&e, 1, "auth_error");
+    fail(&mut e, 1, T0 + 2 * MIN + T_RETRY, r);
+    let r = unverifiable(&e, 1, "auth_error");
+    fail(&mut e, 1, T0 + 2 * MIN + 2 * T_RETRY, r);
+    let lp = e.get_lp(acc(LP)).unwrap();
+    assert_eq!((lp.bond.0, lp.locked.0, lp.open_orders), (0, 0, 0));
+}
+
+#[test]
+fn edge_lp_fault_is_sticky_through_a_later_outage() {
+    let mut e = demo();
+    lp_fault(&mut e, T0 + MIN);
+    outage(&mut e, T0 + MIN + T_RETRY);
+    assert_eq!(state(&e), OrderState::Slashed);
+}
+
+#[test]
+fn edge_slash_adds_to_existing_claimable() {
+    let mut e = demo();
+    at(ME, T0);
+    e.on_payout(acc(BUYER), U128(3 * USDC), Err(near_sdk::PromiseError::Failed));
+    lp_fault(&mut e, T0 + MIN);
+    lp_fault(&mut e, T0 + MIN + T_RETRY);
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 13 * USDC);
+}
+
+#[test]
+#[should_panic(expected = "slash conditions not met")]
+fn edge_public_slash_twice_with_other_order_open_fails() {
+    let mut e = demo();
+    at("kofi.testnet", T0);
+    e.open_buy_order(acc(LP), U128(10 * USDC), None);
+    lp_fault(&mut e, T0 + MIN);
+    lp_fault(&mut e, T0 + MIN + T_RETRY);
+    e.slash(0);
+}
+
+#[test]
+fn edge_outage_slash_event_says_not_lp_fault() {
+    let mut e = demo();
+    outage(&mut e, T0 + MIN);
+    outage(&mut e, T0 + MIN + T_OUTAGE);
+    assert_eq!(last_event().0, "order_slashed");
+    assert_eq!(last_event().1["lp_fault"], json!(false));
+}
+
+#[test]
+fn edge_not_paid_resets_lp_fault_so_outages_get_the_long_window() {
+    let mut e = demo();
+    lp_fault(&mut e, T0 + MIN);
+    let r = VerifierResult::Output(VerifierOutput { verdict: Verdict::NotPaid, reference: reference(&e, 0), key_fp: fp(), reason: "not_found".into() });
+    fail(&mut e, 0, T0 + 2 * MIN, r);
+    outage(&mut e, T0 + 3 * MIN);
+    outage(&mut e, T0 + 3 * MIN + T_RETRY);
+    assert_eq!(state(&e), OrderState::Unverified);
 }
