@@ -46,4 +46,18 @@ pub enum Event {
     },
     #[event_version("1.0.0")]
     OrderExpired { order_id: u64 },
+    #[event_version("1.0.0")]
+    OrderVerifying { order_id: u64, attempt: u32 },
+    #[event_version("1.0.0")]
+    OrderReleasePending { order_id: u64, release_at: U64 },
+    #[event_version("1.0.0")]
+    OrderReleased { order_id: u64, buyer: AccountId, amount: U128 },
+    /// NOT_PAID: back to awaiting payment, or expired if past the deadline + grace.
+    #[event_version("1.0.0")]
+    OrderNotPaid { order_id: u64, expired: bool },
+    #[event_version("1.0.0")]
+    OrderUnverified { order_id: u64, attempt: u32, failures: u8, lp_fault: bool },
+    /// A payout transfer failed; the amount is now claimable by `account`.
+    #[event_version("1.0.0")]
+    ClaimableCredited { account: AccountId, amount: U128 },
 }

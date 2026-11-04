@@ -96,7 +96,8 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
    and amounts (incl. `ghs_amount_pesewas`) are JSON strings (`U64` / `U128`), because ns
    timestamps exceed JavaScript's 2^53. `count_orders_by_lp` / `count_orders_by_buyer` let the app
    page from the newest end.
-   Events: `order_opened`, `order_expired`.
+   Events: `order_opened`, `order_expired`, `order_verifying`, `order_release_pending`,
+   `order_released`, `order_not_paid`, `order_unverified`, `claimable_credited`.
 2. Buyer calls `request_checkout(order_id)` (fee set by the contract, as in step 3). The escrow
    runs the verifier in `checkout` mode inside the TEE with **the same LP key** that later verifies
    it (Paystack `POST /transaction/initialize` with the order's reference and amount,
@@ -124,15 +125,28 @@ Bond rule: the USDC value of an LP's open buy orders can never exceed their bond
      because the buyer may have approved on the phone and the money can still arrive (T35, D-017).
    - `UNVERIFIABLE` on auth error (401: key revoked/invalid), network/5xx error, timeout, 403 (WAF /
      outage, not LP fault), or malformed response.
-5. Callback (accepted only for this order's pending request):
-   - `PAID` → record reference as used → release USDC to buyer (state `RELEASED`), or
-     `RELEASE_PENDING` until `release_at` if a release delay applies; after that anyone may call
-     `finalize_release(order_id)`. If the USDC transfer to the recipient fails (e.g. not registered
-     on the token), the amount is credited to a **claimable balance** for that account, which
-     anyone may retry with `withdraw_claimable(account)`; the books stay exact (inv. 6, D-017). The
-     same applies to slash payouts and seller refunds.
-   - `NOT_PAID` → back to `AWAITING_PAYMENT` if before `pay_deadline + T_grace`, else `EXPIRED`
-     (LP liquidity unlocked).
+5. Callback `on_verdict(order_id, attempt, result)` (`#[private]` + caller check), accepted only
+   while VERIFYING and only for the order's current `attempt` (a late callback for an older claim
+   is ignored, T15). `claim(order_id)` is open to anyone while AWAITING_PAYMENT up to and including
+   `pay_deadline + t_grace`, or from UNVERIFIED at any time; each claim increments `attempt`.
+   `result` is the verifier output `{verdict, reference, key_fp, reason}` or `RunFailed` (OutLayer
+   `null` / no value / timeout). Implemented in M1.5 with this typed input; M2.2 parses OutLayer's
+   response into it:
+   - `PAID` → release (state `RELEASED`): the LP's lock closes and the USDC is credited to the
+     buyer's **claimable balance**; or `RELEASE_PENDING` until `release_at` for a new buyer when a
+     release delay applies, after which anyone may call `finalize_release(order_id)`. The verdict
+     path never schedules a transfer (D-021: it must not fail for lack of gas inside a callback);
+     anyone may call `withdraw_claimable(account)`, which sends the balance to its owner with the
+     caller's gas and re-credits it if the transfer fails (e.g. not registered on the token). The
+     books stay exact (inv. 6). Slash payouts and seller refunds use the same balance.
+   - `NOT_PAID` → the failure streak resets. If the check was **claimed before `pay_deadline`**, the
+     order goes back to `AWAITING_PAYMENT` and the claim window becomes at least `now + T_grace`
+     (a slow answer must not expire an order paid on time, D-021). If it was claimed after the
+     deadline, it goes back only while `now ≤` the claim window (inclusive), else `EXPIRED` (LP
+     liquidity unlocked).
+   - No verdict within `VERIFY_TIMEOUT` (15 min, above OutLayer's yield timeout): anyone may
+     `claim` again; the missing answer counts as an `OUTAGE` failure and the late callback is
+     ignored (its attempt is stale). So no order can stay `VERIFYING` forever (D-021).
    - `UNVERIFIABLE`, wrong reference or `key_fp`, OutLayer error (`null`), no value, or yield
      timeout → `UNVERIFIED`. **Every failure ends in a slash if it never clears** (the buyer's
      cedis are with the LP, off-chain; the bond is the only way to repay her, T30). Failures are

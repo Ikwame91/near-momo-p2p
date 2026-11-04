@@ -12,8 +12,8 @@ pub const MAX_CHECKOUT_URL: usize = 256;
 /// (`num_extra_bytes_record` in the protocol's storage config).
 pub const RECORD_OVERHEAD: u64 = 40;
 /// Bytes the order itself can still grow by after open, pre-charged now (PR #10 review): the
-/// checkout URL (`None` 1 byte → `Some` 1 + 4 + 256) and three `Option<U64>` (1 → 9 bytes each).
-pub const ORDER_GROWTH_BYTES: u64 = (4 + MAX_CHECKOUT_URL as u64) + 3 * 8;
+/// checkout URL (`None` 1 byte → `Some` 1 + 4 + 256) and five `Option<U64>` (1 → 9 bytes each).
+pub const ORDER_GROWTH_BYTES: u64 = (4 + MAX_CHECKOUT_URL as u64) + 5 * 8;
 
 /// Buy-order states (SPEC §6). Borsh stores the variant index: append only, never reorder.
 #[near(serializers = [json, borsh])]
@@ -60,6 +60,20 @@ pub struct Order {
     pub lp_fault: bool,
     /// When a RELEASE_PENDING order may be finalized.
     pub release_at: Option<U64>,
+    /// When the current verification was claimed (PR #11 review: decides NOT_PAID expiry and the
+    /// stuck-VERIFYING timeout).
+    pub claimed_at: Option<U64>,
+    /// Extended claim window after a NOT_PAID for a check that started before the deadline (a slow
+    /// answer must not expire an order paid on time). `None` = `pay_deadline + t_grace`.
+    pub claim_until: Option<U64>,
+}
+
+impl Order {
+    /// Last moment `claim` is accepted from AWAITING_PAYMENT; `expire_order` works strictly after.
+    pub fn last_claim(&self, grace: u64) -> u64 {
+        let base = self.pay_deadline.0.checked_add(grace).unwrap_or_else(|| env::panic_str("overflow"));
+        self.claim_until.map_or(base, |u| u.0.max(base))
+    }
 }
 
 /// `ceil(usdc × rate / 1_000_000)`, rounded UP to protect the LP; > 0 and fits in u64 (SPEC §4.1).
@@ -122,6 +136,8 @@ impl Escrow {
             last_failure_at: None,
             lp_fault: false,
             release_at: None,
+            claimed_at: None,
+            claim_until: None,
         };
         self.orders.insert(id, order.clone());
         self.index_push(&lp, &buyer, id);
@@ -129,7 +145,8 @@ impl Escrow {
 
         // What later steps will write, charged now (PR #10 review): the order's own growth, and
         // the (lp, buyer) history entry that the first release creates (M1.5).
-        let mut later = ORDER_GROWTH_BYTES;
+        // + a claimable-balance entry for the buyer, in case the payout transfer fails (M1.5).
+        let mut later = ORDER_GROWTH_BYTES + RECORD_OVERHEAD + 1 + str_len(buyer.as_str()) + 16;
         if released.is_none() {
             later += RECORD_OVERHEAD + 1 + str_len(lp.as_str()) + str_len(buyer.as_str()) + 4;
         }
@@ -160,8 +177,7 @@ impl Escrow {
         let grace = self.params.t_grace_ns;
         let order = self.orders.get_mut(&order_id).unwrap_or_else(|| env::panic_str("no such order"));
         require!(order.state == OrderState::AwaitingPayment, "order is not awaiting payment");
-        let expires_at = order.pay_deadline.0.checked_add(grace).unwrap_or_else(|| env::panic_str("overflow"));
-        require!(env::block_timestamp() > expires_at, "order has not expired yet");
+        require!(env::block_timestamp() > order.last_claim(grace), "order has not expired yet");
         order.state = OrderState::Expired;
         let (lp, amount, new_buyer) = (order.lp.clone(), order.usdc_amount.0, order.new_buyer);
         self.unlock(&lp, amount, true, new_buyer);

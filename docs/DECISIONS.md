@@ -269,3 +269,18 @@ Status: accepted (reviewer findings, each fixed for its own reason)
 Alternatives: global new-buyer counter weighted by volume (rejected: still gameable with one
 colluding LP); refund storage on close (rejected: loses history and lowers the griefing cost).
 
+## D-021 Verdict path schedules no transfers; no order can stay VERIFYING (PR #11 review) (Nov 4, 2026)
+Status: accepted (both reviewers flagged the same High)
+- PAID credits the buyer's claimable balance; `withdraw_claimable` (anyone, caller's gas) sends it.
+  Reason: paying out from inside the verdict callback needed 35+ TGas of static gas and failed
+  with the allowed callback budgets (measured: fails up to 52 TGas in the mock). A failed callback
+  leaves the order in VERIFYING with no exit, freezing the LP's lock and bond. Now the PAID path
+  fits in the 10 TGas minimum (tested).
+- `VERIFY_TIMEOUT` = 15 min: after it, anyone may re-claim a VERIFYING order; the missing answer
+  counts as an outage failure and a late callback is ignored (stale attempt).
+- NOT_PAID for a check claimed before `pay_deadline` returns the order to AWAITING_PAYMENT with a
+  claim window of at least `now + t_grace`: a slow answer must not expire an order paid on time
+  (T38). A check claimed after the deadline can only find a late payment, so no extension.
+Alternatives: raise the minimum callback gas to ~80 TGas (rejected: still fragile, and any other
+panic would still freeze the order); always RELEASE_PENDING with `release_at = now` (works, but
+needs a second call anyway, like the claimable balance, with one more state to reason about).
