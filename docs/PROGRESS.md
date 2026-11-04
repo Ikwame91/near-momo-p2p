@@ -9,6 +9,36 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 — Session 4: PR #11 review fix-ups (D-021)
+Both reviewers flagged the same High: the PAID callback scheduled a 35 TGas payout and failed with
+the allowed callback gas, leaving the order stuck in VERIFYING. Fixed:
+- `release` credits the buyer's claimable balance (no promise); `withdraw_claimable` pays.
+  Test: PAID verdict succeeds with prepaid gas = MIN_CALLBACK_GAS_TGAS (10).
+- Verdict logic moved to internal `apply_verdict` (M2.2's raw-bytes callback will call it).
+- `claimed_at` + `claim_until` on the order (storage pre-charged): slow NOT_PAID for an early check
+  gives a fresh grace period; stuck VERIFYING re-claimable after VERIFY_TIMEOUT (15 min), counted
+  as an outage.
+- Tests: payout receipts (deposit, gas, weights, callback args), claimable sums, re-credit after a
+  failed withdraw, claim on RELEASE_PENDING / RELEASED / EXPIRED fails, exact event payloads,
+  new_buyer_open after NOT_PAID expiry, full streak reset, PENDING after deadline (T35), T16 asserts,
+  fresh grace, no extension for late checks, stuck timeout. 4 old tests changed because the
+  behaviour deliberately changed (PAID credits claimable instead of transferring; clearer
+  "in flight" message); none weakened.
+- Mutation re-check: 19 mutations incl. all reviewer survivors still applicable: all caught.
+- Docs: SPEC §4.1 events, §4.5; THREAT T6, T37–T39; PLAN notes M1.5, M1.6, M2.1, M2.2, M2.7;
+  DECISIONS D-021.
+```
+$ cd contracts && cargo test
+     Running unittests src/lib.rs (target/debug/deps/openramp_escrow-d81469ffa25a38a7)
+test result: ok. 217 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.87s
+     Running unittests src/lib.rs (target/debug/deps/openramp_mock_ft-f436da86f5147f23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+$ cargo clippy --all-targets   (no output)
+```
+Next: merge PR #11; M1.6 slash.
+
 ## 2026-11-04 — Session 4: M1.5 DONE (verdict handling, release, claimable payouts)
 Branch: `escrow/verdicts-and-release` (from main after PR #10).
 Done (`src/verdicts.rs`, `src/verdicts_tests.rs`):

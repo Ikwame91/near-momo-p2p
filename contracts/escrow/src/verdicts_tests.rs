@@ -132,7 +132,7 @@ fn claim_after_deadline_plus_grace_fails() {
 }
 
 #[test]
-#[should_panic(expected = "order cannot be claimed in its current state")]
+#[should_panic(expected = "a verification is already in flight")]
 fn claim_while_verifying_fails() {
     // Only one verification in flight per order (SPEC §6).
     let mut e = with_order();
@@ -158,7 +158,9 @@ fn paid_releases_usdc_to_buyer_and_closes_the_lock() {
     let lp = e.get_lp(acc(LP)).unwrap();
     // The USDC left the LP: liquidity stays at 290, locked back to 0.
     assert_eq!((lp.liquidity.0, lp.locked.0, lp.open_orders, lp.new_buyer_open.0), (290 * USDC, 0, 0, 0));
-    assert_eq!(ft_transfers(), vec![(BUYER.to_string(), (10 * USDC).to_string())]);
+    // The verdict path schedules no transfer (PR #11 review): the USDC is owed to the buyer.
+    assert!(ft_transfers().is_empty());
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 10 * USDC);
     assert_eq!(e.get_buyer_released(acc(LP), acc(BUYER)), 1);
     assert_eq!(events().last().unwrap(), "order_released");
 }
@@ -272,8 +274,10 @@ fn finalize_at_release_at_pays_the_buyer() {
     { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
     at("anyone.testnet", T0 + 6 * MIN);
     e.finalize_release(0);
-    assert_eq!(state(&e), OrderState::Released);
-    assert_eq!(ft_transfers(), vec![(BUYER.to_string(), (10 * USDC).to_string())]);
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.state, o.release_at), (OrderState::Released, None));
+    assert!(ft_transfers().is_empty());
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 10 * USDC);
     assert_eq!(e.get_lp(acc(LP)).unwrap().open_orders, 0);
 }
 
@@ -339,7 +343,7 @@ fn not_paid_after_the_deadline_expires_the_order() {
     { let r = output(&e, Verdict::NotPaid, "not_found"); verify(&mut e, LAST_CLAIM + 1, r) }; // re-claim from UNVERIFIED
     assert_eq!(state(&e), OrderState::Expired);
     let lp = e.get_lp(acc(LP)).unwrap();
-    assert_eq!((lp.liquidity.0, lp.locked.0, lp.open_orders), (300 * USDC, 0, 0));
+    assert_eq!((lp.liquidity.0, lp.locked.0, lp.open_orders, lp.new_buyer_open.0), (300 * USDC, 0, 0, 0));
     assert!(ft_transfers().is_empty());
 }
 
@@ -418,9 +422,12 @@ fn paid_after_failures_still_releases() {
 // ---- payouts and claimable balances (inv. 6) ----
 
 #[test]
-fn failed_payout_becomes_claimable() {
+fn failed_payout_becomes_claimable_again() {
     let mut e = with_order();
     { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
+    at("anyone.testnet", T0 + MIN);
+    let _ = e.withdraw_claimable(acc(BUYER)); // debits first
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 0);
     at(ME, T0 + MIN);
     assert!(!e.on_payout(acc(BUYER), U128(10 * USDC), Err(PromiseError::Failed)));
     assert_eq!(e.get_claimable(acc(BUYER)).0, 10 * USDC);
@@ -471,4 +478,259 @@ fn not_paid_at_exactly_deadline_plus_grace_goes_back_to_awaiting_payment() {
     at("anyone.testnet", LAST_CLAIM + 1);
     e.expire_order(0);
     assert_eq!(state(&e), OrderState::Expired);
+}
+
+// ---- PR #11 review fix-ups ----
+
+use crate::lp::{FT_TRANSFER_MIN_GAS, WITHDRAW_CALLBACK_GAS};
+use crate::verdicts::VERIFY_TIMEOUT_NS;
+use crate::MIN_CALLBACK_GAS_TGAS;
+use near_sdk::serde_json::json;
+use near_sdk::Gas;
+
+/// (event, data) of every NEP-297 event in the current logs.
+fn event_data() -> Vec<(String, Value)> {
+    get_logs()
+        .iter()
+        .filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| {
+            let v: Value = serde_json::from_str(j).unwrap();
+            (v["event"].as_str().unwrap().to_string(), v["data"].clone())
+        })
+        .collect()
+}
+
+#[test]
+fn paid_verdict_fits_in_the_minimum_callback_gas() {
+    // H1: the verdict path schedules no promise, so even the smallest allowed callback budget
+    // (MIN_CALLBACK_GAS_TGAS) is enough; a panic here would leave the order stuck in VERIFYING.
+    let mut e = with_order();
+    at("anyone.testnet", T0 + MIN);
+    let attempt = e.claim(0);
+    let r = output(&e, Verdict::Paid, "ok");
+    testing_env!(VMContextBuilder::new()
+        .current_account_id(acc(ME))
+        .predecessor_account_id(acc(ME))
+        .block_timestamp(T0 + MIN)
+        .prepaid_gas(Gas::from_tgas(MIN_CALLBACK_GAS_TGAS))
+        .build());
+    assert!(e.on_verdict(0, attempt, r));
+    assert_eq!(state(&e), OrderState::Released);
+    assert!(get_created_receipts().is_empty(), "no promise from the verdict path");
+}
+
+#[test]
+fn withdraw_claimable_creates_exact_transfer_and_callback() {
+    let mut e = with_order();
+    { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
+    at("anyone.testnet", T0 + MIN);
+    let _ = e.withdraw_claimable(acc(BUYER));
+    let mut calls = vec![];
+    for r in get_created_receipts() {
+        for a in r.actions {
+            if let MockAction::FunctionCallWeight { method_name, args, attached_deposit, prepaid_gas, gas_weight, .. } = a {
+                let v: Value = serde_json::from_slice(&args).unwrap();
+                calls.push((r.receiver_id.to_string(), String::from_utf8(method_name).unwrap(), v, attached_deposit, prepaid_gas, gas_weight.0));
+            }
+        }
+    }
+    assert_eq!(calls.len(), 2);
+    let (to, m, args, dep, gas, w) = &calls[0];
+    assert_eq!((to.as_str(), m.as_str()), (TOKEN, "ft_transfer"));
+    assert_eq!((args["receiver_id"].as_str(), args["amount"].as_str()), (Some(BUYER), Some("10000000")));
+    assert_eq!((*dep, *gas, *w), (NearToken::from_yoctonear(1), FT_TRANSFER_MIN_GAS, 1));
+    let (to, m, args, dep, gas, w) = &calls[1];
+    assert_eq!((to.as_str(), m.as_str()), (ME, "on_payout"));
+    assert_eq!(args, &json!({"account": BUYER, "amount": "10000000"}));
+    assert_eq!((*dep, *gas, *w), (NearToken::from_yoctonear(0), WITHDRAW_CALLBACK_GAS, 0));
+}
+
+#[test]
+fn two_failed_payouts_add_up() {
+    let mut e = with_order();
+    at(ME, T0);
+    e.on_payout(acc(BUYER), U128(10 * USDC), Err(PromiseError::Failed));
+    e.on_payout(acc(BUYER), U128(10 * USDC), Err(PromiseError::Failed));
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 20 * USDC);
+    assert_eq!(event_data().last().unwrap(), &("claimable_credited".into(), json!({"account": BUYER, "amount": "10000000"})));
+}
+
+#[test]
+#[should_panic(expected = "order cannot be claimed in its current state")]
+fn claim_on_release_pending_fails() {
+    let mut e = with_delay();
+    { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
+    e.claim(0);
+}
+
+#[test]
+#[should_panic(expected = "order cannot be claimed in its current state")]
+fn claim_on_released_fails() {
+    let mut e = with_order();
+    { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
+    e.claim(0);
+}
+
+#[test]
+#[should_panic(expected = "order cannot be claimed in its current state")]
+fn claim_on_expired_fails() {
+    let mut e = with_order();
+    at("anyone.testnet", LAST_CLAIM + 1);
+    e.expire_order(0);
+    e.claim(0);
+}
+
+#[test]
+fn verdict_events_carry_the_right_data() {
+    let mut e = with_order();
+    at("anyone.testnet", T0 + MIN);
+    e.claim(0);
+    assert_eq!(event_data().last().unwrap(), &("order_verifying".into(), json!({"order_id": 0, "attempt": 1})));
+    at(ME, T0 + MIN);
+    let r = output(&e, Verdict::Unverifiable, "auth_error");
+    e.on_verdict(0, 1, r);
+    assert_eq!(
+        event_data().last().unwrap(),
+        &("order_unverified".into(), json!({"order_id": 0, "attempt": 1, "failures": 1, "lp_fault": true}))
+    );
+    at("anyone.testnet", T0 + 2 * MIN);
+    e.claim(0);
+    at(ME, T0 + 2 * MIN);
+    let r = output(&e, Verdict::Paid, "ok");
+    e.on_verdict(0, 2, r);
+    assert_eq!(
+        event_data().last().unwrap(),
+        &("order_released".into(), json!({"order_id": 0, "buyer": BUYER, "amount": "10000000"}))
+    );
+}
+
+#[test]
+fn not_paid_and_release_pending_events_carry_the_right_data() {
+    let mut e = with_delay();
+    { let r = output(&e, Verdict::NotPaid, "not_found"); verify(&mut e, T0 + MIN, r) };
+    assert_eq!(event_data().last().unwrap(), &("order_not_paid".into(), json!({"order_id": 0, "expired": false})));
+    { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + 2 * MIN, r) };
+    assert_eq!(
+        event_data().last().unwrap(),
+        &("order_release_pending".into(), json!({"order_id": 0, "release_at": (T0 + 7 * MIN).to_string()}))
+    );
+}
+
+#[test]
+fn not_paid_resets_the_whole_streak() {
+    let mut e = with_order();
+    { let r = output(&e, Verdict::Unverifiable, "auth_error"); verify(&mut e, T0 + MIN, r) };
+    { let r = output(&e, Verdict::NotPaid, "not_found"); verify(&mut e, T0 + 2 * MIN, r) };
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.failures, o.first_failure_at, o.last_failure_at, o.lp_fault), (0, None, None, false));
+}
+
+#[test]
+fn pending_after_the_deadline_stays_unverified_never_expired() {
+    // T35: a charge still pending after deadline + grace must not expire the order.
+    let mut e = with_order();
+    { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, T0 + MIN, r) };
+    { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, LAST_CLAIM + 1, r) };
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.state, o.failures), (OrderState::Unverified, 2));
+    assert_eq!(e.get_lp(acc(LP)).unwrap().locked.0, 10 * USDC);
+    assert!(ft_transfers().is_empty());
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 0);
+}
+
+#[test]
+fn repeated_failures_leave_the_order_unverified_and_move_no_money() {
+    // T16.
+    let mut e = with_order();
+    verify(&mut e, T0 + MIN, VerifierResult::RunFailed);
+    { let r = output(&e, Verdict::Unverifiable, "server_error"); verify(&mut e, T0 + 2 * MIN, r) };
+    assert_eq!(state(&e), OrderState::Unverified);
+    assert!(ft_transfers().is_empty());
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 0);
+}
+
+#[test]
+fn slow_not_paid_for_an_early_check_gives_a_fresh_grace_period() {
+    // M1 (PR #11 review): the check started before the deadline but its answer came after
+    // deadline + grace; the buyer may have paid on time, so the order must not expire yet.
+    let mut e = with_order();
+    at("anyone.testnet", DEADLINE - MIN);
+    let attempt = e.claim(0);
+    at(ME, LAST_CLAIM + 5 * MIN);
+    let r = output(&e, Verdict::NotPaid, "not_found");
+    e.on_verdict(0, attempt, r);
+    let o = e.get_order(0).unwrap();
+    assert_eq!(o.state, OrderState::AwaitingPayment);
+    assert_eq!(o.claim_until.map(|t| t.0), Some(LAST_CLAIM + 7 * MIN)); // now + t_grace
+    at("anyone.testnet", LAST_CLAIM + 7 * MIN); // the buyer can claim again until then
+    e.claim(0);
+    assert_eq!(state(&e), OrderState::Verifying);
+}
+
+#[test]
+#[should_panic(expected = "order has not expired yet")]
+fn order_cannot_be_expired_during_the_fresh_grace_period() {
+    let mut e = with_order();
+    at("anyone.testnet", DEADLINE - MIN);
+    let attempt = e.claim(0);
+    at(ME, LAST_CLAIM + 5 * MIN);
+    let r = output(&e, Verdict::NotPaid, "not_found");
+    e.on_verdict(0, attempt, r);
+    at("anyone.testnet", LAST_CLAIM + 7 * MIN);
+    e.expire_order(0);
+}
+
+#[test]
+fn not_paid_for_a_check_started_after_the_deadline_expires_after_grace() {
+    // A check that started after the deadline can only find a late payment: no extension.
+    let mut e = with_order();
+    at("anyone.testnet", DEADLINE + MIN); // inside the grace window
+    let attempt = e.claim(0);
+    at(ME, LAST_CLAIM + 1);
+    let r = output(&e, Verdict::NotPaid, "not_found");
+    e.on_verdict(0, attempt, r);
+    assert_eq!(state(&e), OrderState::Expired);
+}
+
+#[test]
+#[should_panic(expected = "a verification is already in flight")]
+fn stuck_verification_cannot_be_reclaimed_before_the_timeout() {
+    let mut e = with_order();
+    at("anyone.testnet", T0);
+    e.claim(0);
+    at("anyone.testnet", T0 + VERIFY_TIMEOUT_NS);
+    e.claim(0);
+}
+
+#[test]
+fn stuck_verification_can_be_reclaimed_after_the_timeout() {
+    // H2: a callback that never arrives (or panicked) must not freeze the order and the bond.
+    let mut e = with_order();
+    at("anyone.testnet", T0);
+    assert_eq!(e.claim(0), 1);
+    at("anyone.testnet", T0 + VERIFY_TIMEOUT_NS + 1);
+    assert_eq!(e.claim(0), 2);
+    let o = e.get_order(0).unwrap();
+    assert_eq!((o.state, o.failures, o.lp_fault), (OrderState::Verifying, 1, false), "counted as an outage");
+    at(ME, T0 + VERIFY_TIMEOUT_NS + 2);
+    let r = output(&e, Verdict::Paid, "ok");
+    assert!(!e.on_verdict(0, 1, r), "the late answer for attempt 1 is ignored");
+}
+
+#[test]
+fn release_adds_to_an_existing_claimable_balance() {
+    // inv. 6: a buyer with USDC already waiting (an earlier failed payout) must not lose it.
+    let mut e = with_order();
+    at(ME, T0);
+    e.on_payout(acc(BUYER), U128(3 * USDC), Err(PromiseError::Failed));
+    { let r = output(&e, Verdict::Paid, "ok"); verify(&mut e, T0 + MIN, r) };
+    assert_eq!(e.get_claimable(acc(BUYER)).0, 13 * USDC);
+}
+
+#[test]
+fn not_paid_expiry_event_says_expired() {
+    let mut e = with_order();
+    { let r = output(&e, Verdict::Pending, "pending"); verify(&mut e, T0 + MIN, r) };
+    { let r = output(&e, Verdict::NotPaid, "not_found"); verify(&mut e, LAST_CLAIM + 1, r) };
+    assert_eq!(event_data().last().unwrap(), &("order_not_paid".into(), json!({"order_id": 0, "expired": true})));
 }

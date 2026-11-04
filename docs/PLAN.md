@@ -54,10 +54,13 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       `>`: no gap, no overlap); `buyer_released[(lp, buyer)]` += 1 only on final RELEASED (checked
       add); release delay keyed off `order.new_buyer`; claimable-balance entries are new storage:
       reserve it or fund it from the order's pre-charge.
-      Verdict handling behind a `Verifier` trait with a mock: PAID / NOT_PAID /
+      Verdict handling with a typed `VerifierResult` input as the mock (no trait needed): PAID / NOT_PAID /
       UNVERIFIABLE / PENDING, replay protection, reference + `key_fp` must match, callback carries
       (order_id, attempt) and stale ones are ignored (inv. 1–3, 10, T15), `finalize_release`,
       claimable balances for failed transfers + `withdraw_claimable` (D-017). Check: tests.
+- [ ] M1.6 [must] (PR #11 review) an LP must not be able to dodge a due slash by racing `claim`: slash
+      automatically inside the failure branch of `apply_verdict` once the window is met, and/or
+      allow `slash` from VERIFYING when the conditions already held at the last failure.
 - [ ] M1.6 [must] (PR #9 review) the slash debits `bond` in the same internal step that unlocks the
       order; test `locked <= bond` after a slash with other orders open.
       Retry window + slash with `min_failed_attempts`, failure classes `LP_FAULT` (`T_retry`) /
@@ -75,6 +78,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       and record real gas burnt for ft_transfer / on_withdraw (D-016). Check: passes.
 
 ## M2 Verifier + real wiring (Nov 6–8)
+- [ ] M2.1 (PR #11 review) the verifier output must carry `key_fp` and a `PENDING` verdict (Test A's has
+      neither). Probe how long Paystack keeps an unapproved GH mobile-money charge pending; if it
+      can stay pending indefinitely, a buyer could slash without paying (T25 via PENDING): map
+      "pending older than pay_deadline + X" to NOT_PAID and record it in DECISIONS.
 - [ ] M2.1 (PR #10 review) exact reference format in the verifier (`opr-` + 8 lowercase hex + `-` +
       digits) and fix its stale `opr-<order_id>` doc comment.
 - [ ] M2.1 `verifier/` crate (start from `scripts/test-a/paystack-verify`, which already has the
@@ -90,6 +97,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       Check: tests incl. the stale-callback race.
 - [ ] M2.2b [must] Escrow `request_checkout(order_id)` → checkout mode → callback stores
       `authorization_url` (D-017). Check: tests + testnet run.
+- [ ] M2.2 (PR #11 review) the OutLayer callback `on_verdict_result(order_id, attempt)` (args built in the
+      contract at claim time, never from the payload) reads the raw bytes with
+      `promise_result_checked`, maps anything unparseable / unknown to `RunFailed` (never panics),
+      then calls `apply_verdict`. Require `t_grace` > worst-case verification latency.
 - [ ] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
 - [ ] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
 - [ ] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
@@ -101,6 +112,8 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       verifier must already include pawaPay and cannot change later. Check: fresh run works.
 - [ ] M2.9 [nice] GitHub Actions: `cargo test` + `cargo near build reproducible-wasm` (avoids the
       Docker Hub rate limit, gives judges CI evidence). Check: green run.
+- [ ] M2.7 (PR #11 review) do not deploy any escrow build to testnet before M2.2: until then `claim` is
+      free and nothing delivers verdicts except the timeout path.
 - [ ] M2.7 [must] Deploy the escrow from a reproducible build, with deploy + `new` in ONE batched transaction
       signed by the contract account (T32); then remove its full-access key, or document upgrade
       trust (inv. 9).

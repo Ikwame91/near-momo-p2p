@@ -2,6 +2,10 @@
 //! here the verifier's result is a typed input to the `on_verdict` callback ("mock verifier"),
 //! which is exactly what M2.2 will feed it after parsing the OutLayer response.
 //!
+//! The verdict path never schedules a transfer (PR #11 review): PAID credits the buyer's claimable
+//! balance, and `withdraw_claimable` (anyone, with the caller's gas) sends it. A callback that
+//! cannot panic for lack of gas cannot leave an order stuck in VERIFYING.
+//!
 //! Rules: only a verdict for the order's CURRENT attempt, while VERIFYING, counts (T15); it must
 //! carry this order's reference and the LP's registered key_fp, otherwise it is UNVERIFIABLE
 //! (inv. 10). USDC is released only on PAID (inv. 1). PENDING / UNVERIFIABLE / a failed run never
@@ -45,37 +49,64 @@ pub enum VerifierResult {
 /// Verifier reasons that are the LP's fault (D-012, D-017): key rejected (HTTP 401) or missing.
 /// Every other reason, and anything unknown, is an outage.
 const LP_FAULT_REASONS: [&str; 2] = ["auth_error", "no_key"];
+/// A VERIFYING order with no verdict after this long can be re-claimed by anyone; the missing
+/// answer counts as an outage failure and a late callback is ignored (its attempt is stale).
+/// Well above OutLayer's yield timeout (~200 blocks).
+pub const VERIFY_TIMEOUT_NS: u64 = 15 * 60 * 1_000_000_000;
 
 #[near]
 impl Escrow {
     /// Start a verification (SPEC §4.3). Anyone may call it (the buyer, the LP, a keeper):
-    /// AWAITING_PAYMENT until `pay_deadline + t_grace` (inclusive; `expire_order` is strictly
-    /// after), or UNVERIFIED at any time (a re-check). Returns the new attempt number, which the
-    /// verdict must carry. M2.2 adds the OutLayer call and the contract-set fee.
+    /// AWAITING_PAYMENT until `last_claim` (inclusive; `expire_order` is strictly after),
+    /// UNVERIFIED at any time (a re-check), or VERIFYING after `VERIFY_TIMEOUT_NS` with no verdict
+    /// (counted as an outage failure). Returns the new attempt number, which the verdict must
+    /// carry. M2.2 adds the OutLayer call and the contract-set fee.
     pub fn claim(&mut self, order_id: u64) -> u32 {
         let now = env::block_timestamp();
         let grace = self.params.t_grace_ns;
         let order = self.orders.get_mut(&order_id).unwrap_or_else(|| env::panic_str("no such order"));
         match order.state {
             OrderState::AwaitingPayment => {
-                let last = order.pay_deadline.0.checked_add(grace).unwrap_or_else(|| env::panic_str("overflow"));
-                require!(now <= last, "claim window has passed; the order can be expired");
+                require!(now <= order.last_claim(grace), "claim window has passed; the order can be expired");
             }
             OrderState::Unverified => {}
+            OrderState::Verifying => {
+                let since = order.claimed_at.expect("set by claim").0;
+                let stuck_after = since.checked_add(VERIFY_TIMEOUT_NS).unwrap_or_else(|| env::panic_str("overflow"));
+                require!(now > stuck_after, "a verification is already in flight");
+                record_failure(order, now, false);
+                Event::OrderUnverified {
+                    order_id,
+                    attempt: order.attempt,
+                    failures: order.failures,
+                    lp_fault: order.lp_fault,
+                }
+                .emit();
+            }
             _ => env::panic_str("order cannot be claimed in its current state"),
         }
         order.state = OrderState::Verifying;
         order.attempt = order.attempt.checked_add(1).unwrap_or_else(|| env::panic_str("overflow"));
+        order.claimed_at = Some(U64(now));
         let attempt = order.attempt;
         Event::OrderVerifying { order_id, attempt }.emit();
         attempt
     }
 
-    /// Verdict callback (from the OutLayer resume in M2.2). Returns false if the verdict was
-    /// ignored as stale. The caller check is explicit (D-016).
+    /// Verdict entry point used by tests and, until M2.2, the only way to deliver a verdict. M2.2
+    /// adds the OutLayer callback, which reads the raw promise result, maps anything unparseable to
+    /// `RunFailed` (never panics) and calls `apply_verdict`. Returns false if ignored as stale.
     #[private]
     pub fn on_verdict(&mut self, order_id: u64, attempt: u32, result: VerifierResult) -> bool {
         require!(env::predecessor_account_id() == env::current_account_id(), "only the contract itself");
+        self.apply_verdict(order_id, attempt, result)
+    }
+}
+
+impl Escrow {
+    /// Apply a verdict. Never schedules a promise and never panics on verifier content, so it
+    /// cannot fail for lack of gas inside a callback (PR #11 review).
+    pub(crate) fn apply_verdict(&mut self, order_id: u64, attempt: u32, result: VerifierResult) -> bool {
         let now = env::block_timestamp();
         let (grace, delay) = (self.params.t_grace_ns, self.params.release_delay_ns);
         let Some(order) = self.orders.get(&order_id) else { return false };
@@ -119,14 +150,22 @@ impl Escrow {
                 }
             }
             Outcome::NotPaid => {
-                let last = order.pay_deadline.0.checked_add(grace).unwrap_or_else(|| env::panic_str("overflow"));
                 // A clear answer ends the unverified streak.
                 order.failures = 0;
                 order.first_failure_at = None;
                 order.last_failure_at = None;
                 order.lp_fault = false;
-                if now <= last {
+                // Expire only if the check itself started after the deadline (any payment found
+                // then would be late anyway). A check that started earlier may have been answered
+                // late: give the buyer a fresh grace period to claim again (PR #11 review).
+                let claimed_at = order.claimed_at.map_or(now, |t| t.0);
+                if claimed_at <= order.pay_deadline.0 {
+                    let until = now.checked_add(grace).unwrap_or_else(|| env::panic_str("overflow"));
+                    order.claim_until = Some(U64(until.max(order.last_claim(grace))));
                     order.state = OrderState::AwaitingPayment;
+                    Event::OrderNotPaid { order_id, expired: false }.emit();
+                } else if now <= order.last_claim(grace) {
+                    order.state = OrderState::AwaitingPayment; // still inside the window, no extension
                     Event::OrderNotPaid { order_id, expired: false }.emit();
                 } else {
                     order.state = OrderState::Expired;
@@ -136,19 +175,28 @@ impl Escrow {
                 }
             }
             Outcome::Failure { lp_fault } => {
-                order.state = OrderState::Unverified;
-                order.failures = order.failures.saturating_add(1);
-                if order.first_failure_at.is_none() {
-                    order.first_failure_at = Some(U64(now));
-                }
-                order.last_failure_at = Some(U64(now));
-                order.lp_fault |= lp_fault;
+                record_failure(order, now, lp_fault);
                 Event::OrderUnverified { order_id, attempt, failures: order.failures, lp_fault: order.lp_fault }.emit();
             }
         }
         true
     }
+}
 
+/// Count one failed verification (UNVERIFIED): failures++, first time kept, last time updated,
+/// LP_FAULT sticky for the streak (D-012).
+fn record_failure(order: &mut crate::Order, now: u64, lp_fault: bool) {
+    order.state = OrderState::Unverified;
+    order.failures = order.failures.saturating_add(1);
+    if order.first_failure_at.is_none() {
+        order.first_failure_at = Some(U64(now));
+    }
+    order.last_failure_at = Some(U64(now));
+    order.lp_fault |= lp_fault;
+}
+
+#[near]
+impl Escrow {
     /// Release a RELEASE_PENDING order once `release_at` has passed. Anyone may call it.
     pub fn finalize_release(&mut self, order_id: u64) {
         let order = self.orders.get(&order_id).unwrap_or_else(|| env::panic_str("no such order"));
@@ -192,7 +240,8 @@ enum Outcome {
 
 impl Escrow {
     /// Final release of a buy order: RELEASED, the LP's lock closes (the USDC leaves the LP), the
-    /// buyer's history with this LP grows (D-020), and the USDC is sent to the buyer.
+    /// buyer's history with this LP grows (D-020), and the USDC is credited to the buyer's
+    /// claimable balance (no promise here; `withdraw_claimable` sends it, PR #11 review).
     fn release(&mut self, order_id: u64) {
         let order = self.orders.get_mut(&order_id).expect("order exists");
         order.state = OrderState::Released;
@@ -202,8 +251,9 @@ impl Escrow {
         let key = (lp, buyer.clone());
         let n = self.buyer_released.get(&key).copied().unwrap_or(0);
         self.buyer_released.insert(key, n.checked_add(1).unwrap_or_else(|| env::panic_str("overflow")));
-        Event::OrderReleased { order_id, buyer: buyer.clone(), amount: U128(amount) }.emit();
-        self.pay_out(buyer, amount).detach();
+        let cur = self.claimable.get(&buyer).copied().unwrap_or(0);
+        self.claimable.insert(buyer.clone(), cur.checked_add(amount).unwrap_or_else(|| env::panic_str("overflow")));
+        Event::OrderReleased { order_id, buyer, amount: U128(amount) }.emit();
     }
 
     /// Send `amount` USDC to `account`; on failure `on_payout` credits a claimable balance, so the
