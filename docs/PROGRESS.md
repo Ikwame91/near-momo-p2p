@@ -9,6 +9,27 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 22:45 UTC — Session 4c: real OutLayer → Paystack check works on testnet (M2.3)
+Done (escrow-d1, LP ikwame.testnet, Kwame's real Paystack TEST key in OutLayer profile `paystack-lp`,
+hash 6a9ff46b…, access `from:escrow-d1.ikwame.testnet`):
+- set_secret_ref → paystack-lp (6xC5vqjMSKywDWm3G3KCQerh3ktJeT9qs9c5cBTzAXSW); request_fingerprint →
+  key_fp 9d2894e2… (5fKvk97fFvMTpXZGiZAN9KLQkU2P4AjHMRtcn2Dq4qU1).
+- PAID: order 1, 2 mUSDC = 30 GHS (6TJNHuioXVimkwme4nFtNfXAEwDvmwQxr61QQN49RFp5); paid with a Paystack
+  test MoMo charge (MTN test number) for reference opr-f51ae4a2-1; claim → `order_released`
+  (9jsoF6soxwd7t1zVjfbn1n2WYSMGhYisF75P2GbcudJ); withdraw → buyer 12 mUSDC (F36rJP9BkckAWsSwHN8SAuTYTRXY5UWU3SjwwJhonUJc).
+- NOT_PAID: order 2, 3 mUSDC, never paid (5PVBnibr4kS1LKmay8gGm8NDKvr61hWs1A6aVkYGsRq); claim →
+  `order_not_paid`, failures 0 (578ZZGyXfp4WzS2fPAQbaXf3aP5HPmy3CnXb16Cvgb6n); after deadline + grace
+  expire_order → EXPIRED, LP unlocked, bond untouched (HEubiXioKTP1GXe8y3QpJNRW7B338KyN5G6eS2HUeWN8).
+  LP after: bond 40, liquidity 98, locked 0.
+Failed / blocked:
+- request_checkout on order 1 returned `http_error` (tx 3AseaWvyxMbTD9SRd7rzjpmbhmUQWyBgpBPvWBhK4mjh):
+  Paystack rejects the synthetic email `buyer@openramp.example` (400 invalid_email_address). Fixed in
+  source (`buyer@example.com`, accepted in a probe; test added). Needs a verifier rebuild → new hash →
+  new escrow deploy (verifier fixed at init) → Kwame stores the secret again for the new hash.
+Next: bundle any other verifier fixes, rebuild, redeploy as d2, checkout URL demo; web page M4.1.
+Gotchas: the program's JSON output is visible as the outlayer.testnet receipt's SuccessValue in
+EXPERIMENTAL_tx_status (how the http_error was found).
+
 ## 2026-11-04 22:10 UTC — Session 4b: testnet deploy (M2.8) + slash shown on testnet (M2.4)
 Done:
 - `scripts/deploy-testnet.sh d1`: musdc-d1.ikwame.testnet (mock-ft, tx GBWBmYH4dYvTwoiAf7iYYB628E4qMzPeMy8NLBWfNrE2),

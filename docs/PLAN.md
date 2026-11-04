@@ -124,7 +124,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       `promise_result_checked`, maps anything unparseable / unknown to `RunFailed` (never panics),
       then calls `apply_verdict`. Require `t_grace` > worst-case verification latency.
 - [x] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
-- [ ] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
+- [x] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
+      (Done Nov 4 on escrow-d1 with the real test key; NOT_PAID → expire also shown. Tx links in PROGRESS.)
+- [ ] M2.3b [must] Checkout email fix (done in source) → rebuild verifier, redeploy (d2), Kwame re-stores
+      the secret for the new hash; show request_checkout returning a Paystack URL.
 - [x] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
       (Done Nov 4 with a fake key on escrow-d1: scripts/buy.sh, tx links in PROGRESS.)
 - [ ] M2.6 Reproducible verifier build (rust-toolchain.toml; OutLayer GitHub compile if possible,
