@@ -9,6 +9,29 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 — Session 4: OutLayer wiring done (M2.1, M2.1b, M2.2, M2.2b, M2.2c), unit level
+- `verifier/` crate (v2): modes fingerprint / checkout / verify; key_fp in every verify output;
+  PENDING; only 401 = auth_error; amount, currency and mobile_money channel checked before PAID
+  and PENDING; exact `opr-<8hex>-<id>`; checkout via Paystack initialize (GHS, mobile_money,
+  synthetic email). 19 tests. wasm sha256 6a9ff46b643c65ef7339c5d6b7f573b55c09f7764c614c101c958d76a440926f.
+- TEE smoke test (CLI, FAKE key bound to the hash): fingerprint → `931d1516…` (= sha256 of the fake
+  key, tx CEKQRPBEzDUtCrzV9eyJCSNue4cKU7vvh7vX3kegxdaE); verify → UNVERIFIABLE auth_error
+  (tx A7euG5BMCNYo6qBurg3M35w9iiu3w9CUctCKA41y5BDT); checkout → error auth_error, i.e. the POST
+  reached Paystack (tx FbR7vhtwFx923vsaPuRfBf38138wH6pvnxnL5wsMNB1a). First fingerprint try hit an
+  RPC timeout; the retry worked.
+- Escrow: payable `claim` (fee, exact request_execution args, callback args built in the contract,
+  fee refunded when it slashes), `on_verdict_result` (raw bytes, never panics), `request_fingerprint`
+  + `on_fingerprint_result` (64 hex, key_fp unset, no open orders, `secret_gen` unchanged),
+  `request_checkout` + `on_checkout_result` (Paystack URL ≤ 256 chars, this order's reference).
+  Internal logic renamed `begin_claim` (tests use it). 14 new tests.
+```
+$ cd contracts && cargo test
+test result: ok. 264 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+$ cd verifier && cargo test
+test result: ok. 19 passed; 0 failed
+```
+Next: testnet deploy (M2.8 script), LP setup, created → PAID, slash.
+
 ## 2026-11-04 — Session 4: M1.7 DONE (books check, one test)
 `books_tests::books_balance_covers_everything_owed_across_all_flows`: models the contract's USDC
 balance (in via ft_on_transfer, out via successful transfers) through deposits, stray tokens, 4

@@ -77,7 +77,7 @@ fn unverifiable(e: &Escrow, id: u64, reason: &str) -> VerifierResult {
 /// Claim order `id` at `time` and deliver `result` for that attempt.
 fn fail(e: &mut Escrow, id: u64, time: u64, result: VerifierResult) {
     at("anyone.testnet", time);
-    let attempt = e.claim(id);
+    let attempt = e.begin_claim(id);
     at(ME, time);
     e.on_verdict(id, attempt, result);
 }
@@ -251,7 +251,7 @@ fn a_slashed_order_cannot_be_claimed() {
     let mut e = demo();
     lp_fault(&mut e, T0 + MIN);
     lp_fault(&mut e, T0 + MIN + T_RETRY);
-    e.claim(0);
+    e.begin_claim(0);
 }
 
 #[test]
@@ -260,7 +260,7 @@ fn a_late_paid_verdict_after_the_slash_is_ignored() {
     let mut e = demo();
     lp_fault(&mut e, T0 + MIN);
     at("anyone.testnet", T0 + MIN + T_RETRY);
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     at(ME, T0 + MIN + T_RETRY);
     let r = unverifiable(&e, 0, "auth_error");
     e.on_verdict(0, attempt, r);
@@ -308,9 +308,9 @@ fn a_missing_answer_for_a_check_started_before_the_window_does_not_slash() {
     let mut e = demo();
     outage(&mut e, T0 + MIN);
     at("anyone.testnet", T0 + 2 * MIN);
-    e.claim(0); // never answered
+    e.begin_claim(0); // never answered
     at("anyone.testnet", T0 + 2 * MIN + VERIFY_TIMEOUT_NS + 1);
-    let attempt = e.claim(0);
+    let attempt = e.begin_claim(0);
     assert!(attempt > 0, "a fresh verification, not a slash");
     let o = e.get_order(0).unwrap();
     assert_eq!((o.state, o.failures), (OrderState::Verifying, 2));
@@ -325,9 +325,9 @@ fn a_missing_answer_for_a_check_started_after_the_window_slashes() {
     let mut e = demo();
     outage(&mut e, T0 + MIN);
     at("anyone.testnet", T0 + MIN + T_OUTAGE);
-    e.claim(0); // started after the outage window was met; never answered
+    e.begin_claim(0); // started after the outage window was met; never answered
     at("anyone.testnet", T0 + MIN + T_OUTAGE + VERIFY_TIMEOUT_NS + 1);
-    assert_eq!(e.claim(0), 0, "0 = slashed instead of a new attempt");
+    assert_eq!(e.begin_claim(0), 0, "0 = slashed instead of a new attempt");
     assert_eq!(state(&e), OrderState::Slashed);
     let names: Vec<String> = get_logs().iter().filter_map(|l| l.strip_prefix("EVENT_JSON:"))
         .map(|j| serde_json::from_str::<Value>(j).unwrap()["event"].as_str().unwrap().to_string()).collect();
@@ -409,7 +409,7 @@ fn edge_slash_after_claim_until_extension() {
     let mut e = demo();
     // claim before the deadline, NotPaid answered after deadline + grace: claim_until extended.
     at("anyone.testnet", T0 + MIN);
-    let a = e.claim(0);
+    let a = e.begin_claim(0);
     let late = T0 + 13 * MIN; // > pay_deadline (10) + grace (2)
     at(ME, late);
     let r = VerifierResult::Output(VerifierOutput { verdict: Verdict::NotPaid, reference: reference(&e, 0), key_fp: fp(), reason: "not_found".into() });
@@ -426,10 +426,10 @@ fn edge_slash_after_claim_until_extension() {
 fn edge_timeout_from_awaiting_counts_then_second_timeout_slashes() {
     let mut e = demo();
     at("anyone.testnet", T0 + MIN);
-    assert_eq!(e.claim(0), 1);
+    assert_eq!(e.begin_claim(0), 1);
     let t1 = T0 + MIN + VERIFY_TIMEOUT_NS + 1;
     at("anyone.testnet", t1);
-    assert_eq!(e.claim(0), 2);
+    assert_eq!(e.begin_claim(0), 2);
     let o = e.get_order(0).unwrap();
     assert_eq!((o.state, o.failures, o.claimed_at.unwrap().0), (OrderState::Verifying, 1, t1));
     assert_eq!(o.last_failure_at.unwrap().0, T0 + MIN + VERIFY_TIMEOUT_NS, "stamped when due");
@@ -438,10 +438,10 @@ fn edge_timeout_from_awaiting_counts_then_second_timeout_slashes() {
     // cannot complete the window, so a fresh check starts.
     let t2 = t1 + VERIFY_TIMEOUT_NS + 1;
     at("anyone.testnet", t2);
-    assert_eq!(e.claim(0), 3);
+    assert_eq!(e.begin_claim(0), 3);
     // Third stuck check, started at t2 (after the window): its timeout completes it and slashes.
     at("anyone.testnet", t2 + VERIFY_TIMEOUT_NS + 1);
-    assert_eq!(e.claim(0), 0);
+    assert_eq!(e.begin_claim(0), 0);
     assert_eq!(state(&e), OrderState::Slashed);
 }
 
@@ -450,12 +450,12 @@ fn edge_timeout_from_awaiting_counts_then_second_timeout_slashes() {
 fn edge_timeout_reclaim_restarts_the_in_flight_clock() {
     let mut e = demo();
     at("anyone.testnet", T0 + MIN);
-    e.claim(0);
+    e.begin_claim(0);
     let t1 = T0 + MIN + VERIFY_TIMEOUT_NS + 1;
     at("anyone.testnet", t1);
-    e.claim(0);
+    e.begin_claim(0);
     at("anyone.testnet", t1 + 1);
-    e.claim(0);
+    e.begin_claim(0);
 }
 
 #[test]

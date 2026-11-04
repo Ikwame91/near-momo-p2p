@@ -13,6 +13,7 @@ use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 mod events;
 mod lp;
 mod orders;
+mod outlayer;
 mod verdicts;
 pub use events::Event;
 pub use lp::{Lp, Pot, Quote, SecretRef, PROVIDERS};
@@ -31,6 +32,8 @@ mod verdicts_tests;
 mod slash_tests;
 #[cfg(test)]
 mod books_tests;
+#[cfg(test)]
+mod outlayer_tests;
 
 #[near]
 #[derive(BorshStorageKey)]

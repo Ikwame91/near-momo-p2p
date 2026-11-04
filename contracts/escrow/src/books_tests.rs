@@ -53,7 +53,7 @@ fn deposit(e: &mut Escrow, b: &mut Books, lp: &str, amount: u128, msg: &str) {
 
 fn verdict(e: &mut Escrow, id: u64, time: u64, v: Option<(Verdict, &str)>) {
     at("anyone.testnet", time, 0);
-    let attempt = e.claim(id);
+    let attempt = e.begin_claim(id);
     at(ME, time, 0);
     let lp_fp = e.get_lp(e.get_order(id).unwrap().lp).unwrap().key_fp.unwrap();
     let r = match v {

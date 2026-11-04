@@ -70,6 +70,8 @@ pub struct Lp {
     /// sha256 of the LP's provider key, hex; set by the TEE fingerprint run. No orders until set
     /// (SPEC §3.1, T24).
     pub key_fp: Option<String>,
+    /// Bumped by `set_secret_ref`, so a fingerprint answer for an older secret is ignored.
+    pub secret_gen: u32,
 }
 
 /// Serialized as "bond" / "liquidity" (same words as the deposit `msg`), in events and callbacks.
@@ -127,6 +129,7 @@ impl Escrow {
                 new_buyer_open: zero,
                 paused: false,
                 key_fp: None,
+                secret_gen: 0,
             },
         );
         self.lps.flush();
@@ -174,6 +177,7 @@ impl Escrow {
         require!(lp.open_orders == 0, "secret is locked while orders are open");
         lp.secret_ref = secret_ref;
         lp.key_fp = None;
+        lp.secret_gen = lp.secret_gen.wrapping_add(1);
         Event::SecretRefChanged { lp: id }.emit();
     }
 
