@@ -125,10 +125,12 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       then calls `apply_verdict`. Require `t_grace` > worst-case verification latency.
 - [x] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
 - [ ] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
-- [ ] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
+- [x] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
+      (Done Nov 4 with a fake key on escrow-d1: scripts/buy.sh, tx links in PROGRESS.)
 - [ ] M2.6 Reproducible verifier build (rust-toolchain.toml; OutLayer GitHub compile if possible,
       SPEC Q7). Check: a second build gives the same sha256.
-- [ ] M2.8 [must] `scripts/deploy.sh` (mock-ft, storage registrations, mint, batched deploy + `new`,
+- [ ] M2.8 [must] (testnet scripts done: deploy-testnet.sh, lp-setup.sh, buy.sh; key deletion and the
+      final reproducible deploy still open) `scripts/deploy.sh` (mock-ft, storage registrations, mint, batched deploy + `new`,
       delete key) and `scripts/lp-setup.sh` (store secret `--via` escrow, register LP). Testnet
       deploys before M3 are throwaway; the final reproducible deploy comes after M3.1, because the
       verifier must already include pawaPay and cannot change later. Check: fresh run works.

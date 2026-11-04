@@ -9,6 +9,27 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-04 22:10 UTC — Session 4b: testnet deploy (M2.8) + slash shown on testnet (M2.4)
+Done:
+- `scripts/deploy-testnet.sh d1`: musdc-d1.ikwame.testnet (mock-ft, tx GBWBmYH4dYvTwoiAf7iYYB628E4qMzPeMy8NLBWfNrE2),
+  escrow-d1.ikwame.testnet deploy + `new` in one tx signed by the escrow (AundrHUg9zp82Z6oZS33bKNcvhBVPKh6GyTtfLLutf5m).
+  get_config: token musdc-d1, outlayer outlayer.testnet, deploy_tag f51ae4a2, verifier 6a9ff46b….
+- `scripts/lp-setup.sh d1 ikwame.testnet smoke-fake`: mint, register_lp, bond 50, liquidity 100,
+  `request_fingerprint` through the escrow → real OutLayer run → callback stored key_fp `931d1516…`
+  (tx HyCobpCWuxdmroU88Wq66rq1Bh1kEKBR3WL2W9ftQ3z).
+- Slash on testnet with the FAKE key (`scripts/buy.sh`): order 0 (10 mUSDC, opr-f51ae4a2-0,
+  tx 42YbW7J5Qa7poTMfNkUqYyNrrzvgsh42ctCCUD4oM15p); claim 1 → UNVERIFIED, lp_fault, failures 1
+  (AVz7QqGD7w9ZB1EnZqQeF8ywLtSY4aJiJPwWCxy5XZ7M); claim 2 after t_retry (3 min) → `order_slashed`
+  10 mUSDC (Hz3QLHuYosA7oirTpKmHyZ2Ktjvn4QnQbCJ6ggkquDyB); withdraw_claimable → buyer holds 10 mUSDC
+  (6DeqoxB6TR8zJBPqSDe5GnZZZb9HEW1wJwQmrjt8Vic4). LP after: bond 40, liquidity 100, locked 0.
+Failed / blocked:
+- PAID path waits on [K]: real Paystack test key as OutLayer secret profile `paystack-lp` for hash
+  6a9ff46b… with `--access allow-all --via escrow-d1.ikwame.testnet` (old `paystack` profile is bound
+  to the Test A hash).
+Next: set_secret_ref → paystack-lp, request_fingerprint, open → checkout → pay (test MoMo) → claim → PAID.
+Gotchas: near CLI output ends with a "console command" line containing `{}`; parse only after
+"return value".
+
 ## 2026-11-04 — Session 4: OutLayer wiring done (M2.1, M2.1b, M2.2, M2.2b, M2.2c), unit level
 - `verifier/` crate (v2): modes fingerprint / checkout / verify; key_fp in every verify output;
   PENDING; only 401 = auth_error; amount, currency and mobile_money channel checked before PAID
