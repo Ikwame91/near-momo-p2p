@@ -301,3 +301,10 @@ Status: accepted by Claude for safety, **Kwame to confirm** (it changes D-017 it
   window; otherwise a fresh check starts. A caller cannot pick the time that completes the window.
 Alternatives: keep PENDING as an outage and cap it in the verifier only (rejected: the verifier is a
 plug-in; the escrow must hold the rule itself).
+
+## D-023 `sha2` in the verifier for the key fingerprint (Nov 4, 2026)
+Status: accepted
+Context: `key_fp = sha256(key)` (SPEC §3.1, T24) must be computed inside the TEE.
+Decision: `sha2` 0.10 (RustCrypto, https://github.com/RustCrypto/hashes) in `verifier/`. The Test A
+prototype in `scripts/test-a/paystack-verify` stays as a record; `verifier/` is the real program.
+Alternatives: hand-written SHA-256 (rejected: easy to get wrong).
