@@ -126,7 +126,7 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
 - [x] M2.2 Wire escrow `claim` to OutLayer `request_execution` + callback (from Test A). Check: testnet run.
 - [x] M2.3 End-to-end testnet buy: open → pay (Paystack test) → claim → USDC released. Check: script + tx links.
       (Done Nov 4 on escrow-d1 with the real test key; NOT_PAID → expire also shown. Tx links in PROGRESS.)
-- [ ] M2.3b [must] Checkout email fix (done in source) → rebuild verifier, redeploy (d2), Kwame re-stores
+- [x] M2.3b [must] (done Nov 10 on d2: checkout page → PAID, tx links in PROGRESS) Checkout email fix (done in source) → rebuild verifier, redeploy (d2), Kwame re-stores
       the secret for the new hash; show request_checkout returning a Paystack URL.
 - [x] M2.4 Revoked-key demo: UNVERIFIABLE → wait `T_retry` → slash pays buyer. Check: script + tx links.
       (Done Nov 4 with a fake key on escrow-d1: scripts/buy.sh, tx links in PROGRESS.)

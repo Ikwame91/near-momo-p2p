@@ -106,7 +106,7 @@ flowchart LR
 | Deploy | Escrow / token | Verifier hash | deploy_tag | Status |
 |---|---|---|---|---|
 | d1 | `escrow-d1` / `musdc-d1` | `6a9ff46b…926f` | `f51ae4a2` | Used for the slash, PAID (via the charge API) and NOT_PAID runs on Nov 4. Its checkout mode fails because Paystack rejects the old email (superseded by d2). |
-| d2 | `escrow-d2` / `musdc-d2` | `ecc0515c…bf7b` | `ad88e13b` | Deployed Nov 4 (escrow deploy + `new` tx 87GcoZAa7FGSD1ST9vCcPt47FzmtyD5nMonMCXYWUk89). LP and buyer are set up. Waiting for Kwame to store the `paystack-d2` secret, then the fingerprint and the checkout-page PAID demo. |
+| d2 | `escrow-d2` / `musdc-d2` | `ecc0515c…bf7b` | `ad88e13b` | Current demo deployment. Deployed Nov 4 (escrow deploy + `new` tx 87GcoZAa7FGSD1ST9vCcPt47FzmtyD5nMonMCXYWUk89). Nov 10: real key stored as `paystack-d2`, fingerprinted, and order 0 paid through the real Paystack checkout page → PAID → released (tx links in PROGRESS Session 5). |
 
 Both escrows are built from the code merged in PR #14; they differ only in the verifier hash
 fixed at init.
@@ -250,8 +250,13 @@ with their PR.
 - **2026-11-04, `27de834`:** README note on why Paystack needs a buyer email and how a real buyer
   would provide it; `lp-setup.sh` gets `SKIP_FINGERPRINT=1`.
   - Why: Kwame asked for the README note; the flag lets LP setup run before the secret exists.
-- **2026-11-05, this commit:** `docs/PROJECT_HISTORY.md` created, and the "Project history (required)"
+- **2026-11-05, `c08e6fd`:** `docs/PROJECT_HISTORY.md` created, and the "Project history (required)"
   rule added to CLAUDE.md and AGENTS.md.
+- **2026-11-10, this commit:** PAID through the real Paystack checkout page on d2 recorded
+  (PROGRESS Session 5, PLAN M2.3b).
+  - Steps: real key stored as `paystack-d2`; fingerprint `9d2894e2…`; checkout URL stored on-chain;
+    Kwame paid with test MoMo; claim → `order_released`; buyer withdrew 2 mUSDC.
+  - Files: docs only.
 
 ---
 
@@ -302,9 +307,8 @@ Short form. Full context in `docs/DECISIONS.md`.
 ## 5. Known issues and tech debt
 
 **Open work for the current schedule**
-- Checkout-page PAID demo on d2 is not done yet. It needs Kwame to store the `paystack-d2` secret.
-  Paystack's checkout page sits behind a Cloudflare bot check, so the payment step has to be done
-  by a person.
+- The payment step can't be automated: Paystack's checkout page sits behind a Cloudflare bot check,
+  so a person has to pay (fine for the demo, but it means no automated end-to-end test).
 - `demo/d2-checkout` (`14fd1f8`, `27de834`) is not merged into `main`.
 - Web page (M4.1–M4.3) and README draft (M5.1) are not started. There is no `web/` folder; buyers
   use `scripts/buy.sh`.
@@ -349,5 +353,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-05. Covers all commits up to and including `27de834` (branch `demo/d2-checkout`), plus the
-commit that adds this file.
+2026-11-10. Covers all commits up to and including `c08e6fd` (branch `demo/d2-checkout`), plus the
+commit that records the Nov 10 checkout-page PAID run.
