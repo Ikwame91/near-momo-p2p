@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenRamp: buy USDC with mobile money</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f5132'/%3E%3Cpath d='M9 21l6-10 4 6 4-6' stroke='%23f4c542' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="name">OpenRamp</span>
+      </div>
+      <div id="wallet"></div>
+    </header>
+    <p class="testnet">Testnet demo. Test money only: no real cedis or USDC move.</p>
+    <main>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <section id="claimable"></section>
+      <section id="buy" aria-labelledby="buy-h"></section>
+      <section id="orders" aria-labelledby="orders-h"></section>
+      <section class="how">
+        <h2>How it works</h2>
+        <ol>
+          <li>You open an order. The seller's USDC is locked in a smart contract nobody controls.</li>
+          <li>You pay the seller in cedis by mobile money on Paystack's page.</li>
+          <li>A program in secure hardware checks with Paystack that you paid, and the contract releases the USDC to you.</li>
+        </ol>
+        <p>If the seller's side can't be checked, the seller's bond pays you instead. <span id="contract-link"></span></p>
+        <p>Each step is a NEAR transaction you confirm in your wallet. Keep about 0.5 testnet NEAR in it for network fees; most of it comes back.</p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

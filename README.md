@@ -12,6 +12,13 @@ Built for the NEAR Hackathon (Nov 1–14, 2026). Work in progress: see `docs/SPE
 `rustup` installs the right version automatically. Contracts: `cd contracts && cargo test`;
 reproducible wasm: `cd contracts/escrow && cargo near build reproducible-wasm` (needs Docker).
 
+**Web page (buyer):** `cd web && npm install && npm run dev`, then open the printed address.
+It talks to the testnet escrow in `web/.env.example` (override with a `web/.env.local`). Connect a
+NEAR **testnet** wallet (Meteor or Intear) holding about 0.5 NEAR, open an order, get the Paystack
+link, pay with test mobile money, then check the payment and withdraw. `?view=<account>` shows any
+account's orders read-only. `npm test` runs the money-maths tests; `npm run build` writes the
+static site to `web/dist`.
+
 **Buy flow (cedis → USDC):** Paystack test-mode mobile money payments, checked inside an
 OutLayer TEE. **Sell flow (USDC → cedis):** payouts run on the **pawaPay sandbox** (a Paystack
 Starter account cannot send transfers), with a clearly labelled simulated check as fallback.

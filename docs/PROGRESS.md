@@ -9,6 +9,39 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-10 18:00 UTC — Session 5b: web buyer page (M4.1 done, M4.2 built, manual wallet run open)
+Done:
+- `web/`: plain JS + Vite page (D-024). Shows the LP's live quote, opens orders, gets the Paystack
+  link, checks the payment, closes unpaid orders, withdraws (registers the buyer on the token first
+  if needed). `?view=<account>` = read-only view. Money maths in `src/format.js` (BigInt, 4 tests).
+- Verified in headless Chromium against escrow-d2: page loads live data, light and dark; wallet
+  modal opens and the Meteor popup launches with a login request.
+- Every call the page makes (`src/calls.js`) sent with a throwaway key (webtest-d2.ikwame.testnet,
+  `scripts/check-calls.mjs`): open (How3ksKDNjdXANGypFZ12oXCmfL7MnWxEpjvXjwbzj5C), request_checkout
+  → real Paystack URL (4RndW4v4sLRHj69GEc5E3bL4p1vM976NP67jrbWz9z6b), claim → NOT_PAID
+  (5ctr5tiedsoyTfqhfR8g5j6UJzwvsUf84fsLxsdEFx9a), expire (CW15DDwjihoSNhN45tjRduEQks6hxnA78AftAMRo35rT);
+  order 2: open, test charge, claim → released (9WCoPJJz9E6vhRVhPDfnHmDqiZXwRKpr3R5QzyELpjur),
+  storage_deposit + withdraw (8L49odSnxJAcqg56Go5R7wqLB2Tyn1ST1vsqyPHiEJpw), balance 1 mUSDC.
+```
+$ cd web && npm test
+# pass 4
+# fail 0
+$ npx vite build
+✓ built in 461ms
+```
+Failed / blocked:
+- Could not click through a wallet myself: MyNearWallet is in "limited mode" (no new app
+  connections since Nov 1), Meteor's site blocks the cloud browser, Intear's picker did not open a
+  popup in headless. Stopped after these tries; the wallet step needs Kwame's manual run.
+Next: Kwame runs the page with a testnet wallet (Meteor or Intear); then M4.3 LP screen, M4.5 hosting, README.
+Gotchas:
+- Browser needs `Buffer` and `global` shims for the NEAR wallet libraries (src/buffer-shim.js, vite.config.js).
+- Paystack's charge API answers "Duplicate Transaction Reference" once a checkout exists for the
+  reference: after request_checkout, payment can only happen on the checkout page.
+- A signed call with 300 TGas needs ~0.31 NEAR free in the account up front. ikwame.testnet is down
+  to ~0.2 NEAR: top it up from the faucet before the next deploy.
+- Screenshots caught a rendering bug (order cards shown as "[object HTMLDivElement]"); fixed.
+
 ## 2026-11-10 17:30 UTC — Session 5: PAID through the real Paystack checkout page on d2 (M2.3b)
 Done (escrow-d2.ikwame.testnet, verifier ecc0515c…, deploy_tag ad88e13b; d2 deploy tx
 87GcoZAa7FGSD1ST9vCcPt47FzmtyD5nMonMCXYWUk89 on Nov 4):

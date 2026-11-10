@@ -162,13 +162,17 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
 - [ ] M3.3 [nice] `settlement/`: withdraw released USDC to Base via 1Click (per D on SPEC Q4). Check: tx links.
 
 ## M4 Web demo (Nov 9–11)
-- [ ] M4.1 `web/` scaffold with NEAR wallet login. Check: runs locally.
+- [x] M4.1 `web/` scaffold with NEAR wallet login. Check: runs locally. (Nov 10: Vite page, wallet
+      selector with Meteor + Intear, D-024. The modal and wallet popup open; wallet sites block
+      automated browsers, so the login click-through is for Kwame's manual run.)
 - [ ] M4.6 Demo script shows four outcomes live: PAID → release; NOT_PAID (wrong amount / wrong
       recipient); UNVERIFIABLE `LP_FAULT` → slash; provider down → window extended to
       `T_outage_max`, honest LP protected (D-012). Trigger for the outage case: sell flow → pawaPay
       sandbox number 233593456129 returns IN_RECONCILIATION (observed in Test B2); buy flow → TBD
       (likely the labelled simulated provider returning `server_error`). Check: recorded run.
 - [ ] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
+      (Nov 10: built; every call the page makes was sent to escrow-d2 with a test key via
+      `web/scripts/check-calls.mjs`; screenshot in docs/screenshots. STILL OPEN: Kwame's manual run with a real wallet.)
 - [ ] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
 - [ ] M4.4 [nice] Seller screen (the CLI + lp-service script with tx links can show the sell flow). Check: manual run.
 - [ ] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.
