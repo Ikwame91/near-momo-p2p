@@ -269,13 +269,19 @@ with their PR.
 - **2026-11-10, `cfac207`:** PR #15 merged (all of Phase 8).
 
 ### Phase 9: Web page (Nov 10; branch `web/buyer-page`)
-- **2026-11-10, this commit:** buyer page in `web/` (M4.1 done; M4.2 built).
+- **2026-11-10, `ac69961`:** buyer page in `web/` (M4.1 done; M4.2 built).
   - What: live LP quote, open order, Paystack link, check payment, close unpaid order, withdraw;
     read-only `?view=<account>` mode; light and dark.
   - Why: until now buyers could only use `scripts/buy.sh`; the demo needs a page.
   - Checked: loads against escrow-d2 in a browser; every call it makes was sent with a throwaway
     test key and accepted by the escrow (tx links in PROGRESS Session 5b).
   - Files: `web/*`, `docs/screenshots/buyer-page.png`, README, DECISIONS (D-024), PLAN, PROGRESS.
+- **2026-11-10, this commit:** fix: the page stayed blank under `npm run dev`.
+  - Why: `@near-js/accounts` reads `process.env` when it loads; the production build replaces it,
+    the dev server does not (`ReferenceError: process is not defined`). Kwame hit it on his first run;
+    my earlier checks had only used the production build.
+  - Fix: `web/src/buffer-shim.js` also provides an empty `process.env`. Checked both
+    `npm run dev` and the built page in a browser.
 
 ---
 
@@ -378,5 +384,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-10. Covers all commits up to and including `cfac207` (`main`), plus the commit on branch
-`web/buyer-page` that adds the web page.
+2026-11-10. Covers all commits up to and including `ac69961` (branch `web/buyer-page`), plus the
+commit that fixes the blank page under `npm run dev`.
