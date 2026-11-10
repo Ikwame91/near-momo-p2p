@@ -9,6 +9,24 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-10 17:30 UTC — Session 5: PAID through the real Paystack checkout page on d2 (M2.3b)
+Done (escrow-d2.ikwame.testnet, verifier ecc0515c…, deploy_tag ad88e13b; d2 deploy tx
+87GcoZAa7FGSD1ST9vCcPt47FzmtyD5nMonMCXYWUk89 on Nov 4):
+- Kwame stored the real Paystack test key as profile `paystack-d2` (hash ecc0515c…, calls only via
+  escrow-d2). First attempt stored the literal placeholder; caught from his screenshot before any
+  fingerprint, re-stored. request_fingerprint → key_fp 9d2894e2… (= the real key's fp on d1, not
+  the placeholder's 46b1d2d1…), tx BobGuDx1P3ub7EeQbZtwc9n6WH9paZULDmdDVxZhyi1B.
+- Order 0, 2 mUSDC = 30 GHS, ref opr-ad88e13b-0 (7XpaFuhLLkdAgmiMHSheYubpG1eFNSMr9KJ22CVVxeRD).
+- request_checkout → TEE created the checkout with the LP's key; `order_checkout` stored
+  https://checkout.paystack.com/ewsslgmngqmta6b (9tRHeCYNg8mm9DxdSGFHxkXWZM8dxmVbqXQB5cEAHAun).
+  The email fix works.
+- Kwame paid on that checkout page (test MoMo, MTN). claim → `order_released` 2 mUSDC
+  (5dKzaxnqqLjpCJTSfGvaUWybRa8SbT4aZLZyfCWq6aB6); withdraw → buyer-d2 holds 2 mUSDC
+  (3TcS1rFmn6ZEgDYVkFKGfJVPd1RRCjygaEmmPadu3t3V).
+Failed / blocked: none. (Headless browser cannot pass Paystack's Cloudflare check, so the payment
+step is manual.)
+Next: merge demo/d2-checkout; web page M4.1–M4.3; README M5.1; video + submit before Nov 14 23:59 UTC.
+
 ## 2026-11-04 22:45 UTC — Session 4c: real OutLayer → Paystack check works on testnet (M2.3)
 Done (escrow-d1, LP ikwame.testnet, Kwame's real Paystack TEST key in OutLayer profile `paystack-lp`,
 hash 6a9ff46b…, access `from:escrow-d1.ikwame.testnet`):

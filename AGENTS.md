@@ -67,6 +67,17 @@ SPEC.md §8 is the full, canonical list; this is a summary.
 ## Definition of done (per task)
 Code + tests passing + PLAN.md ticked + PROGRESS.md entry + commit + push.
 
+## Project history (required)
+docs/PROJECT_HISTORY.md is the project's living record.
+After completing any change that you commit:
+- Add a dated Timeline entry: what changed, why, key files, commit hash.
+- If you made a technical choice, add it to the Decisions log.
+- If you added a shortcut or left something unfinished, add it to
+  Known issues; remove items you fixed.
+- Update the architecture section if the structure changed.
+- Update "Last updated" with the date and latest commit hash.
+Commit the history update together with the change itself.
+
 ## Git
 - Push freely to this repo's working branches with clear commit messages.
 - Ask before: merging to `main` from a feature branch with unreviewed money logic, or submitting.

@@ -4,6 +4,7 @@
 #
 # Usage: scripts/lp-setup.sh <tag> <lp_account> <secret_profile>
 #   <tag> picks musdc-<tag>.<parent> / escrow-<tag>.<parent> from scripts/deploy-testnet.sh.
+# SKIP_FINGERPRINT=1 stops before request_fingerprint (run it once the secret is stored).
 # Needs: NEAR_ACCOUNT_ID (parent), NEAR_PRIVATE_KEY (its full-access key; the LP must be the parent
 # or a sub-account created with the same key). The secret itself is stored separately by the LP
 # (`outlayer secrets set ... --profile <secret_profile> --wasm-hash <verifier hash>
@@ -37,5 +38,6 @@ echo "== bond + liquidity"
 call "$LP" "$TOKEN" ft_transfer_call "{\"receiver_id\":\"$ESCROW\",\"amount\":\"$BOND\",\"msg\":\"bond\"}" '1 yoctoNEAR'
 call "$LP" "$TOKEN" ft_transfer_call "{\"receiver_id\":\"$ESCROW\",\"amount\":\"$LIQUIDITY\",\"msg\":\"liquidity\"}" '1 yoctoNEAR'
 
+[ "${SKIP_FINGERPRINT:-}" = 1 ] && { echo "== fingerprint skipped (SKIP_FINGERPRINT=1)"; exit 0; }
 echo "== request_fingerprint (OutLayer TEE reads the LP's secret; fee 0.01 NEAR, excess refunded)"
 call "$LP" "$ESCROW" request_fingerprint '{}' '0.05 NEAR' '300 Tgas'
