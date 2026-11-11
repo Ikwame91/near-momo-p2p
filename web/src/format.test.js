@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ghsPesewasFor, fmtUsdc, fmtGhs, parseUsdc, nextStep,
-  flowScreen, statusPill, timeAgo, shortAccount, amountIssue, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome,
+  flowScreen, statusPill, timeAgo, shortAccount, amountIssue, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome, sellerSummary,
 } from "./format.js";
 
 test("GHS cost matches the contract: ceil(usdc × rate / 1e6)", () => {
@@ -131,4 +131,20 @@ test("what the secure enclave answered, from the order before and after", () => 
   assert.equal(enclaveOutcome("claim", before, { ...before, state: "AWAITING_PAYMENT" }), "not-paid");
   assert.equal(enclaveOutcome("claim", before, { ...before, state: "EXPIRED" }), "not-paid");
   assert.equal(enclaveOutcome("claim", before, { ...before, state: "VERIFYING" }), "still-checking");
+});
+
+test("seller summary: what the LP can serve now, and key status", () => {
+  const lp = (x) => ({ bond: "50000000", liquidity: "98000000", locked: "3000000", open_orders: 1, new_buyer_open: "3000000",
+    paused: false, key_fp: "9d2894e2228d76562ace357e5bd936f55e97293e8c52d30197c042031cd61526",
+    quote: { rate_pesewas_per_usdc: "1500", min_usdc: "1000000", max_usdc: "50000000", new_buyer_exposure_max: "100000000" }, ...x });
+  const s = sellerSummary(lp({}));
+  assert.equal(s.canServe, 47_000_000n); // bond rule: locked ≤ bond, so 50 − 3 is the limit, not liquidity 98
+  assert.equal(s.bondFree, 47_000_000n);
+  assert.equal(s.keyShort, "9d2894e2…1526");
+  assert.equal(s.status, "open");
+  assert.equal(sellerSummary(lp({ liquidity: "10000000" })).canServe, 10_000_000n);
+  assert.equal(sellerSummary(lp({ paused: true })).status, "paused");
+  assert.equal(sellerSummary(lp({ key_fp: null })).status, "no-key");
+  assert.equal(sellerSummary(lp({ key_fp: null })).keyShort, null);
+  assert.equal(sellerSummary(lp({ locked: "60000000" })).canServe, 0n); // never negative
 });

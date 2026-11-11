@@ -314,3 +314,28 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- seller page (read-only) ---------- */
+.seller-page { display: grid; gap: var(--s3); }
+.seller-head { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
+.seller-head .seller-id { flex: 1; min-width: 0; }
+.seller-head h1 { margin: 0; font-size: 1.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.big-avatar { width: 44px; height: 44px; font-size: 1.1rem; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s1); margin: var(--s2) 0; }
+.stat { background: var(--bg); border-radius: var(--radius-sm); padding: 12px; min-width: 0; }
+.stat-label { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+.stat-value { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; }
+.stat-hint { font-size: 0.75rem; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+.facts { display: grid; gap: 10px; margin: var(--s2) 0; }
+.facts > div { display: flex; justify-content: space-between; gap: var(--s2); align-items: baseline; font-size: 0.92rem; }
+.facts > div > :last-child { text-align: right; }
+.key-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600; }
+.key-ok .icon { width: 16px; height: 16px; }
+.key-missing { color: var(--pending); font-weight: 600; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+.small { font-size: 0.85rem; }
+.order-row.static { display: flex; align-items: center; gap: var(--s1); padding: 12px var(--s2); min-height: 52px; }
+.order-row.static .buyer { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.back-link { color: var(--brand); font-weight: 600; }
+@media (max-width: 380px) { .stats { grid-template-columns: 1fr; } }
+.seller-head .avatar { display: grid; place-items: center; flex: none; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-weight: 700; }

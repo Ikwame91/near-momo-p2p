@@ -175,7 +175,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       `web/scripts/check-calls.mjs`. Nov 11: page redesigned, screenshots in
       `docs/screenshots/buyer-redesign/`. STILL OPEN: Kwame's manual run with a wallet that is
       not the seller. `ikwame.testnet` cannot buy from itself.)
-- [ ] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
+- [x] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
+      (Nov 11: read-only seller page at `?seller` / `?seller=<account>`: bond, liquidity, locked,
+      open orders, can-sell-now, quote, key fingerprint status, the LP's orders. Registering and
+      depositing stay in `scripts/lp-setup.sh`; no LP transactions from the page.)
 - [ ] M4.4 [nice] Seller screen (the CLI + lp-service script with tx links can show the sell flow). Check: manual run.
 - [ ] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.
 

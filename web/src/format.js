@@ -178,3 +178,13 @@ export function enclaveOutcome(kind, before, after) {
   if (after.state === "UNVERIFIED") return after.lp_fault ? "seller-key" : "no-answer";
   return "not-paid"; // back to AWAITING_PAYMENT, or EXPIRED: Paystack has no payment for it
 }
+
+/** LP numbers for the seller page (all BigInt USDC units). canServe = min(liquidity, bond − locked). */
+export function sellerSummary(lp) {
+  const bondFree = BigInt(lp.bond) > BigInt(lp.locked) ? BigInt(lp.bond) - BigInt(lp.locked) : 0n;
+  const liquidity = BigInt(lp.liquidity);
+  const canServe = liquidity < bondFree ? liquidity : bondFree;
+  const keyShort = lp.key_fp ? `${lp.key_fp.slice(0, 8)}…${lp.key_fp.slice(-4)}` : null;
+  const status = lp.paused ? "paused" : !lp.key_fp ? "no-key" : "open";
+  return { bondFree, canServe, keyShort, status };
+}

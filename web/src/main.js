@@ -12,6 +12,7 @@ import { h, $, icon } from "./dom.js";
 import { initTheme, currentTheme, toggleTheme } from "./theme.js";
 import { toast } from "./toast.js";
 import { countTo, confetti } from "./motion.js";
+import { loadSeller, sellerScreen } from "./seller.js";
 
 const escrow = calls(ESCROW_ID);
 const ORDERS_SHOWN = 20;
@@ -22,6 +23,15 @@ const RING = 2 * Math.PI * 15.5;
 const viewParam = new URLSearchParams(location.search).get("view") || "";
 const VIEW_AS = /^[a-z0-9._-]{2,64}$/.test(viewParam) ? viewParam : null;
 const who = () => state.account || VIEW_AS;
+
+// Seller page (read-only): `?seller` shows this deploy's LP, `?seller=<account>` any LP.
+const params = new URLSearchParams(location.search);
+const sellerParam = params.get("seller");
+const SELLER_ID = params.has("seller") ? (/^[a-z0-9._-]{2,64}$/.test(sellerParam || "") ? sellerParam : DEFAULT_LP) : null;
+const BUY_HREF = location.pathname;
+const SELLER_HREF = `${location.pathname}?seller`;
+let sellerData = null;
+let sellerKey = null;
 
 const state = {
   account: null,
@@ -87,6 +97,11 @@ function focused() {
 async function load() {
   try {
     if (!state.config) state.config = await view(ESCROW_ID, "get_config");
+    if (SELLER_ID) {
+      sellerData = await loadSeller(view, ESCROW_ID, SELLER_ID);
+      state.loadError = null;
+      return render();
+    }
     state.lp = await view(ESCROW_ID, "get_lp", { account_id: DEFAULT_LP });
     if (who()) {
       const buyer = who();
@@ -516,7 +531,8 @@ function renderHow() {
       item("check", "USDC is released", "A match releases the USDC. If the seller can't be checked, their bond pays you."),
     ),
     h("p", { class: "foot" }, "Each step is a transaction you confirm in your wallet. Keep about 1 testnet NEAR in it for fees; most of it comes back. ",
-      h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, ESCROW_ID)),
+      h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, ESCROW_ID),
+      SELLER_ID ? null : [" · ", h("a", { href: SELLER_HREF }, "Seller view")]),
   );
 }
 
@@ -544,8 +560,35 @@ function renderHeader() {
   }
 }
 
+function renderSeller() {
+  const root = $("flow");
+  root.setAttribute("aria-label", "Seller");
+  if (!sellerData) {
+    if (state.loadError) return root.replaceChildren(h("div", { class: "card" }, h("h1", {}, "Couldn't load the seller"), h("p", {}, "Check your connection and refresh.")));
+    if (!root.childElementCount) root.replaceChildren(h("div", { class: "card skeleton", "aria-busy": "true", "aria-label": "Loading" },
+      h("div", { class: "sk sk-line" }), h("div", { class: "sk sk-amount" }), h("div", { class: "sk sk-btn" })));
+    return;
+  }
+  const now = nowNs();
+  const grace = BigInt(state.config.params.t_grace_ns);
+  // Rebuild only when something shown changed ("time ago" and pills follow the clock).
+  const key = JSON.stringify([sellerData, sellerData.orders.map((o) => [statusPill(o, now, grace).label, timeAgo(o.opened_at, now)])]);
+  if (key === sellerKey) return;
+  sellerKey = key;
+  root.replaceChildren(sellerScreen({
+    data: sellerData, lpId: SELLER_ID, escrowId: ESCROW_ID, explorerAccount: EXPLORER_ACCOUNT, nowNs: now, graceNs: grace, buyHref: BUY_HREF,
+  }));
+  $("orders").replaceChildren();
+}
+
 function render() {
   $("mark").replaceChildren(icon("logo"));
+  if (SELLER_ID) {
+    renderHeader();
+    renderSeller();
+    renderHow();
+    return;
+  }
   renderHeader();
   renderFlow();
   renderOrders();
@@ -603,6 +646,7 @@ document.addEventListener("click", (e) => {
 });
 
 setInterval(() => {
+  if (SELLER_ID) { if (state.config) renderSeller(); return; }
   paintClocks();
   if (state.config) renderOrders(); // only rebuilds when a pill or "time ago" changed
   const order = focused();
