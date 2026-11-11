@@ -135,7 +135,7 @@ export function humanError(raw) {
   if (/user (rejected|cancelled|canceled)|rejected the transaction|closed the window|user denied/.test(m))
     return "You closed the wallet before confirming.";
   if (/insufficient|not enough balance|not enough near|does not have enough/.test(m))
-    return "This account doesn't have enough NEAR for the network fee.";
+    return "This account doesn't have enough NEAR for the network fee. Keep about 1 testnet NEAR in the wallet; most of it comes back.";
   if (/cannot buy from itself/.test(m))
     return "You can't buy from your own seller account.";
   if (/claim window has passed|payment window|order has not expired|has expired/.test(m))
@@ -162,4 +162,19 @@ export function ringFraction(deadlineNs, windowNs, nowNs) {
   if (left <= 0n || win <= 0n) return 0;
   if (left >= win) return 1;
   return Number(left) / Number(win);
+}
+
+/**
+ * What the secure enclave (OutLayer) answered to a request, judged from the order before and after.
+ * kind: "checkout" (request_checkout) or "claim". An empty answer from OutLayer leaves no checkout
+ * link, or adds an UNVERIFIED failure that is not the seller's fault: both are "no-answer".
+ */
+export function enclaveOutcome(kind, before, after) {
+  if (!after) return "no-answer";
+  if (kind === "checkout") return after.checkout_url ? "checkout-ready" : "no-answer";
+  if (after.state === "RELEASED" || after.state === "RELEASE_PENDING") return "paid";
+  if (after.state === "SLASHED") return "slashed";
+  if (after.state === "VERIFYING") return "still-checking";
+  if (after.state === "UNVERIFIED") return after.lp_fault ? "seller-key" : "no-answer";
+  return "not-paid"; // back to AWAITING_PAYMENT, or EXPIRED: Paystack has no payment for it
 }

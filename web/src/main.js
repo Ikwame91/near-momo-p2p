@@ -6,7 +6,7 @@ import { view, initWallet, showWalletModal, signOut, send } from "./near.js";
 import { calls, storageDeposit } from "./calls.js";
 import {
   ghsPesewasFor, parseUsdc, fmtUsdc, fmtGhs, nextStep, flowScreen, statusPill, timeAgo,
-  shortAccount, initial, amountIssue, humanError, payMinutes, clockLeft, ringFraction,
+  shortAccount, initial, amountIssue, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome,
 } from "./format.js";
 import { h, $, icon } from "./dom.js";
 import { initTheme, currentTheme, toggleTheme } from "./theme.js";
@@ -31,6 +31,7 @@ const state = {
   orders: [],
   claimable: 0n,
   busy: false,
+  busyEnclave: false, // the running action waits on OutLayer (checkout link or payment check)
   loadError: null,
   focusId: null,
   compose: false,
@@ -111,20 +112,43 @@ async function load() {
   render();
 }
 
+// Plain-words result of an OutLayer request, shown after the wallet action finishes.
+const ENCLAVE_NO_ANSWER = "The verification service didn't answer. Your money is safe. Try again in a few minutes.";
+const ENCLAVE_MESSAGES = {
+  "checkout-ready": ["ok", "Your Paystack payment link is ready."],
+  "no-answer": ["pending", ENCLAVE_NO_ANSWER],
+  paid: ["ok", "Payment confirmed."],
+  slashed: ["ok", "The seller's side couldn't be verified, so their bond pays you. You're protected."],
+  "seller-key": ["pending", "The seller's Paystack key was rejected. Check again later; if it stays this way, the seller's bond pays you."],
+  "not-paid": ["pending", "Paystack hasn't confirmed a payment for this order yet. If you just paid, wait a moment and check again."],
+  "still-checking": ["pending", "Still checking with the secure enclave. This page updates by itself."],
+};
+
+/** Label for the spinner while an action runs. */
+const busyLabel = () => (state.busyEnclave ? "Checking with the secure enclave… this can take up to 2 minutes" : "Waiting for your wallet…");
+
+/**
+ * Run a wallet action. meta.enclave = "checkout" | "claim" marks a call that waits on OutLayer: the
+ * spinner then names the enclave, and the result is judged from the order before and after.
+ */
 async function act(label, txs, meta = {}) {
   if (state.busy || !state.account) return;
   state.busy = true;
+  state.busyEnclave = !!meta.enclave;
+  const before = meta.orderId != null ? state.orders.find((o) => o.id === meta.orderId) : null;
   let sentHash = null;
   let ok = false;
   render();
   if (pendingToast) pendingToast();
-  pendingToast = toast("pending", `${label}: confirm in your wallet…`);
+  pendingToast = toast("pending", meta.enclave
+    ? `${label}: approve in your wallet. Then the secure enclave checks with Paystack; this can take up to 2 minutes.`
+    : `${label}: confirm in your wallet…`);
   try {
     const hashes = await send(txs);
     if (pendingToast) pendingToast();
     pendingToast = null;
     const hash = hashes[hashes.length - 1]; // the escrow call is always the last one sent
-    toast("ok", `${label} sent.`, hash ? { href: EXPLORER_TX + hash, text: "View transaction" } : null);
+    if (!meta.enclave) toast("ok", `${label} sent.`, hash ? { href: EXPLORER_TX + hash, text: "View transaction" } : null);
     if (meta.orderId != null) state.focusId = meta.orderId;
     state.compose = false;
     rememberTx(meta.orderId, hash);
@@ -136,7 +160,13 @@ async function act(label, txs, meta = {}) {
     toast("error", humanError(e));
   } finally {
     state.busy = false;
+    state.busyEnclave = false;
     await load();
+    if (ok && meta.enclave && before) {
+      const after = state.orders.find((o) => o.id === meta.orderId);
+      const [kind, message] = ENCLAVE_MESSAGES[enclaveOutcome(meta.enclave, before, after)];
+      toast(kind, message, sentHash ? { href: EXPLORER_TX + sentHash, text: "View transaction" } : null);
+    }
     // Only after a successful open: a cancelled or failed open stays on the amount screen.
     if (ok && meta.focusNewest && state.orders[0]) {
       rememberTx(state.orders[0].id, sentHash);
@@ -213,7 +243,7 @@ function renderAmount() {
   const limits = { min, max, paused: lp.paused, ready: !!lp.key_fp, self };
   const payLine = h("div", { class: "big num" });
   const issue = h("div", { class: "issue", id: "amount-error", role: "alert" });
-  const button = state.busy ? spinnerButton("Waiting for your wallet…") : h("button", { class: "primary" });
+  const button = state.busy ? spinnerButton(busyLabel()) : h("button", { class: "primary" });
   let paintChips = () => {};
 
   const update = () => {
@@ -288,13 +318,13 @@ function renderPay(order) {
   const url = safeCheckout(order.checkout_url);
   const minutes = payMinutes(state.config.params.t_pay_ns);
   const primary = state.busy
-    ? spinnerButton("Waiting for your wallet…")
+    ? spinnerButton(busyLabel())
     : url
       ? h("a", { class: "primary", href: url, target: "_blank", rel: "noopener" }, "Open Paystack checkout")
       : h("button", {
           class: "primary",
           disabled: !state.account,
-          onclick: () => act("Open Paystack checkout", [escrow.requestCheckout(order.id, fee())], { orderId: order.id }),
+          onclick: () => act("Open Paystack checkout", [escrow.requestCheckout(order.id, fee())], { orderId: order.id, enclave: "checkout" }),
         }, "Open Paystack checkout");
   return h("div", { class: "card rise" },
     stepper(2),
@@ -306,7 +336,7 @@ function renderPay(order) {
     h("button", {
       class: "secondary",
       disabled: state.busy || !state.account,
-      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id }),
+      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }),
     }, "I've paid, check payment"),
   );
 }
@@ -321,22 +351,22 @@ function renderVerify(order) {
     body = `The payment couldn't be checked (${order.failures} ${order.failures === 1 ? "try" : "tries"}). Check again in a few minutes. If it can never be checked, the seller's bond pays you.`;
     action = h("button", {
       class: "primary", disabled: state.busy || !state.account,
-      onclick: () => act("Check again", [escrow.claim(order.id, fee())], { orderId: order.id }),
-    }, state.busy ? "Waiting for your wallet…" : "Check again");
+      onclick: () => act("Check again", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }),
+    }, state.busy ? busyLabel() : "Check again");
   } else if (step === "check") {
     title = "The pay window has ended";
     body = "If you paid in time, we can still check. If not, you can close the order. You are not charged.";
     action = h("button", {
       class: "primary", disabled: state.busy || !state.account,
-      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id }),
-    }, state.busy ? "Waiting for your wallet…" : "Check payment");
+      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }),
+    }, state.busy ? busyLabel() : "Check payment");
   } else if (step === "finalize") {
     title = "Payment confirmed";
     body = "The USDC unlocks after a short safety delay, then you can take it to your wallet.";
     action = h("button", {
       class: "primary", disabled: state.busy || !state.account,
       onclick: () => act("Finish release", [escrow.finalizeRelease(order.id)], { orderId: order.id }),
-    }, state.busy ? "Waiting for your wallet…" : "Finish release");
+    }, state.busy ? busyLabel() : "Finish release");
   }
   const tipId = `tip-${order.id}`;
   return h("div", { class: "card rise enclave" },
@@ -485,7 +515,7 @@ function renderHow() {
       item("shield", "Checked in a secure enclave", "Paystack is asked directly. The seller's key never leaves the enclave."),
       item("check", "USDC is released", "A match releases the USDC. If the seller can't be checked, their bond pays you."),
     ),
-    h("p", { class: "foot" }, "Each step is a transaction you confirm in your wallet. Keep a little testnet NEAR for fees. ",
+    h("p", { class: "foot" }, "Each step is a transaction you confirm in your wallet. Keep about 1 testnet NEAR in it for fees; most of it comes back. ",
       h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, ESCROW_ID)),
   );
 }

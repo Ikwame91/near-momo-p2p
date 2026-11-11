@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ghsPesewasFor, fmtUsdc, fmtGhs, parseUsdc, nextStep,
-  flowScreen, statusPill, timeAgo, shortAccount, amountIssue, humanError, payMinutes, clockLeft, ringFraction,
+  flowScreen, statusPill, timeAgo, shortAccount, amountIssue, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome,
 } from "./format.js";
 
 test("GHS cost matches the contract: ceil(usdc × rate / 1e6)", () => {
@@ -114,4 +114,21 @@ test("pay timer comes from t_pay_ns", () => {
   assert.equal(ringFraction(600n, 600n, 0n), 1);
   assert.equal(ringFraction(300n, 600n, 0n), 0.5);
   assert.equal(ringFraction(0n, 600n, 1n), 0);
+});
+
+test("what the secure enclave answered, from the order before and after", () => {
+  const before = { state: "AWAITING_PAYMENT", checkout_url: null, failures: 0, lp_fault: false };
+  // request_checkout
+  assert.equal(enclaveOutcome("checkout", before, { ...before, checkout_url: "https://checkout.paystack.com/x" }), "checkout-ready");
+  assert.equal(enclaveOutcome("checkout", before, before), "no-answer");
+  assert.equal(enclaveOutcome("checkout", before, undefined), "no-answer");
+  // claim
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "RELEASED" }), "paid");
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "RELEASE_PENDING" }), "paid");
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "SLASHED" }), "slashed");
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "UNVERIFIED", failures: 1 }), "no-answer");
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "UNVERIFIED", failures: 1, lp_fault: true }), "seller-key");
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "AWAITING_PAYMENT" }), "not-paid");
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "EXPIRED" }), "not-paid");
+  assert.equal(enclaveOutcome("claim", before, { ...before, state: "VERIFYING" }), "still-checking");
 });

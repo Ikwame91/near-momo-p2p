@@ -14,7 +14,7 @@ reproducible wasm: `cd contracts/escrow && cargo near build reproducible-wasm` (
 
 **Web page (buyer):** `cd web && npm install && npm run dev`, then open the printed address.
 It talks to the testnet escrow in `web/.env.example` (override with a `web/.env.local`). Connect a
-NEAR **testnet** wallet (Meteor or Intear) holding about 0.5 NEAR, open an order, get the Paystack
+NEAR **testnet** wallet (Meteor or Intear) holding about 1 NEAR, open an order, get the Paystack
 link, pay with test mobile money, then check the payment and withdraw. `?view=<account>` shows any
 account's orders read-only. `npm test` runs the money-maths tests; `npm run build` writes the
 static site to `web/dist`.
