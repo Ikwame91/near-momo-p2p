@@ -9,6 +9,31 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-11 06:50 UTC — Buyer page redesign (UI only; M4.2 manual run still open)
+Done:
+- Redesigned `web/` on `web/buyer-page`: centered card, light/dark, 4-step buyer flow, live
+  USDC/GHS amount, pay countdown from `t_pay_ns`, verify state, outcome cards, toasts, orders list.
+- `calls.js` and `near.js` unchanged. No new npm packages. Bundle about +20 KB.
+- The connected account is refused before the wallet opens when it is the seller
+  (`ikwame.testnet` on this deploy).
+```
+$ cd web && npm test
+# pass 10
+# fail 0
+$ npm run build
+✓ built
+```
+Failed / blocked:
+- Kwame's Meteor run as `ikwame.testnet` was rejected by the contract: an LP cannot buy from
+  itself. Meteor showed the panic as raw JSON. The happy path (open → pay → check → withdraw)
+  still needs a different testnet account.
+Next: Kwame connects a buyer account that is not the LP, then M4.3 LP screen, M4.5 hosting, README.
+Gotchas:
+- Meteor's own error popup cannot be restyled. Blocking self-buy on the page is what keeps that
+  raw JSON from appearing.
+- Headless Chrome on this machine would not lay out at a real 375 CSS px; fit was checked by
+  forcing the page width and measuring the card.
+
 ## 2026-11-10 18:00 UTC — Session 5b: web buyer page (M4.1 done, M4.2 built, manual wallet run open)
 Done:
 - `web/`: plain JS + Vite page (D-024). Shows the LP's live quote, opens orders, gets the Paystack

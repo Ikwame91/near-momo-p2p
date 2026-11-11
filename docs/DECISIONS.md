@@ -327,3 +327,15 @@ be tested by a person. Reads use plain JSON-RPC `fetch` (no SDK). No function-ca
 Alternatives: React + a NEAR starter template (more code and dependencies than one page needs);
 near-api-js `WalletConnection` redirect flow (tied to MyNearWallet, now closed); a page that holds
 a private key in the browser (rejected: never ask users for keys).
+
+## D-025 Buyer page redesign stays in the UI layer (Nov 11, 2026)
+Status: accepted
+Context: the first buyer page worked against escrow-d2 but looked like a raw form. The redesign
+brief asked for a fintech layout, motion, and human errors, without changing contract calls.
+Decision: the new layout, theme, toasts and stepper live in `web/src/main.js`, `style.css`,
+`dom.js`, `theme.js`, `toast.js` and `motion.js`. Motion is CSS and the Web Animations API.
+No new npm package. `calls.js` and `near.js` are unchanged, including deposits, gas, RPC reads
+and the wallet-selector setup. If the connected account is the seller, the page refuses the
+order before the wallet opens.
+Alternatives: the `motion` package (would spend the bundle budget); changing call arguments to
+make the self-buy case succeed (the contract forbids it).

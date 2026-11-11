@@ -78,10 +78,12 @@ Testnet (needs `NEAR_ACCOUNT_ID`, `NEAR_PRIVATE_KEY`; see `.env.example`):
   - `scripts/deploy-testnet.sh`, `lp-setup.sh` and `buy.sh` for testnet;
   - `scripts/test-a` and `scripts/test-b` hold the feasibility tests (records, not product code).
 - **Web page** (`web/`, buyer only so far):
-  - `src/main.js`: the page (LP quote, open order, order cards with the next step, withdraw);
-  - `src/calls.js`: every contract call the page makes, as plain data;
+  - `src/main.js`: the buyer flow (amount, pay, verify, outcome) and the orders list;
+  - `src/style.css`: design tokens, light and dark;
+  - `src/calls.js`: every contract call the page makes, as plain data (unchanged by the redesign);
   - `src/near.js`: reads over JSON-RPC, signing through the wallet selector;
-  - `src/format.js`: money maths in BigInt, with tests;
+  - `src/format.js`: money maths, flow labels and error sentences, in BigInt, with tests;
+  - `src/dom.js`, `theme.js`, `toast.js`, `motion.js`: small UI helpers;
   - `scripts/check-calls.mjs`: sends the same calls with a test key.
 - **Not built:** the LP screen (M4.3), hosting (M4.5), `settlement/` (cut), `agent-api/` (dropped, D-010).
 
@@ -268,7 +270,7 @@ with their PR.
   - Files: docs only.
 - **2026-11-10, `cfac207`:** PR #15 merged (all of Phase 8).
 
-### Phase 9: Web page (Nov 10; branch `web/buyer-page`)
+### Phase 9: Web page (Nov 10–11; branch `web/buyer-page`)
 - **2026-11-10, `ac69961`:** buyer page in `web/` (M4.1 done; M4.2 built).
   - What: live LP quote, open order, Paystack link, check payment, close unpaid order, withdraw;
     read-only `?view=<account>` mode; light and dark.
@@ -282,6 +284,16 @@ with their PR.
     my earlier checks had only used the production build.
   - Fix: `web/src/buffer-shim.js` also provides an empty `process.env`. Checked both
     `npm run dev` and the built page in a browser.
+- **2026-11-11, this commit:** buyer page redesigned as a guided fintech flow (D-025).
+  - What: four-step tracker, live USDC/GHS amount, Paystack countdown from `t_pay_ns`, enclave
+    verify state, separate success / expired / failed / slashed cards, toasts, orders list, light
+    and dark. The seller account is refused before the wallet opens.
+  - Why: the first page worked but looked unfinished, and Meteor was showing a raw contract panic
+    when `ikwame.testnet` tried to buy from itself.
+  - Unchanged: `web/src/calls.js` and `web/src/near.js` (same calls, deposits, gas, RPC, wallet setup).
+  - Checked: `npm test` (10) and `npm run build`. Bundle grew about 20 KB. Screenshots in
+    `docs/screenshots/buyer-redesign/`.
+  - Still open: the happy path needs a buyer account that is not the seller (M4.2).
 
 ---
 
@@ -315,6 +327,7 @@ Short form. Full context in `docs/DECISIONS.md`.
 | D-022 | PENDING after `pay_deadline + t_grace` is NOT_PAID; fair slash-window measurement | Stops a "pending forever" attack on LPs | Cap PENDING only in the verifier |
 | D-023 | `sha2` for `key_fp` in the verifier | Don't hand-write SHA-256 | Hand-written SHA-256 |
 | D-024 | Web page in plain JS + Vite + NEAR Wallet Selector (Meteor, Intear); no MyNearWallet; calls kept in one file and checked with a test key | One page doesn't need a framework; MyNearWallet closed app connections on Nov 1 | React starter; redirect-wallet flow; key in the browser |
+| D-025 | Buyer page redesign stays in the UI layer: CSS motion, no new packages | Keep the same contract calls and stay inside a ~100 KB bundle budget | `motion` npm package; editing `calls.js` or the wallet setup |
 
 **Choices made in commits but not (yet) in DECISIONS.md**
 - **Escrow deploy + `new` in one transaction signed by the escrow account** (`8262b81`). From
@@ -335,9 +348,10 @@ Short form. Full context in `docs/DECISIONS.md`.
 **Open work for the current schedule**
 - The payment step can't be automated: Paystack's checkout page sits behind a Cloudflare bot check,
   so a person has to pay (fine for the demo, but it means no automated end-to-end test).
-- **The wallet click-through on the web page has not been tested by a person yet.** The page's
-  calls are proven with a test key, but wallet sites block automated browsers, so signing in and
-  approving in Meteor or Intear still needs Kwame's manual run (M4.2).
+- **The buyer happy path on the web page is still open (M4.2).** On Nov 10 Kwame signed in with
+  Meteor as `ikwame.testnet` and the contract rejected the order: an LP cannot buy from itself.
+  Meteor showed that panic as raw JSON. The page now blocks that account before the wallet opens.
+  A different testnet account, with a little NEAR, still has to open, pay, check and withdraw.
 - The web page shows one seller only (`VITE_DEFAULT_LP`): the escrow has no "list LPs" view.
 - LP screen (M4.3), hosting (M4.5) and README draft (M5.1) are not started; `web/` is on branch
   `web/buyer-page`, not merged.
@@ -384,5 +398,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-10. Covers all commits up to and including `ac69961` (branch `web/buyer-page`), plus the
-commit that fixes the blank page under `npm run dev`.
+2026-11-11. Covers all commits up to and including `ac69961` (branch `web/buyer-page`), the blank-page
+fix, and this commit's buyer-page redesign.

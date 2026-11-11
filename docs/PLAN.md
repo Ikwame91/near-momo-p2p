@@ -172,7 +172,9 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       (likely the labelled simulated provider returning `server_error`). Check: recorded run.
 - [ ] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
       (Nov 10: built; every call the page makes was sent to escrow-d2 with a test key via
-      `web/scripts/check-calls.mjs`; screenshot in docs/screenshots. STILL OPEN: Kwame's manual run with a real wallet.)
+      `web/scripts/check-calls.mjs`. Nov 11: page redesigned, screenshots in
+      `docs/screenshots/buyer-redesign/`. STILL OPEN: Kwame's manual run with a wallet that is
+      not the seller. `ikwame.testnet` cannot buy from itself.)
 - [ ] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
 - [ ] M4.4 [nice] Seller screen (the CLI + lp-service script with tx links can show the sell flow). Check: manual run.
 - [ ] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.

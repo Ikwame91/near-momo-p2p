@@ -1,54 +1,76 @@
-// Buyer page (PLAN M4.1, M4.2): open a buy order, get the Paystack link, pay, claim, withdraw.
-// Everything shown comes from the escrow's view methods; every action is a wallet-signed call.
+// Buyer page. The screen is a guide; every action is still a wallet-signed call from calls.js.
+// Chain data is text only. Nothing here changes method names, args, deposits or gas.
 import "./buffer-shim.js"; // keep first
 import { ESCROW_ID, DEFAULT_LP, EXPLORER_TX } from "./config.js";
 import { view, initWallet, showWalletModal, signOut, send } from "./near.js";
 import { calls, storageDeposit } from "./calls.js";
-import { ghsPesewasFor, parseUsdc, fmtUsdc, fmtGhs, nextStep } from "./format.js";
+import {
+  ghsPesewasFor, parseUsdc, fmtUsdc, fmtGhs, nextStep, flowScreen, statusPill, timeAgo,
+  shortAccount, initial, amountIssue, humanError, payMinutes, clockLeft, ringFraction,
+} from "./format.js";
+import { h, $, icon } from "./dom.js";
+import { initTheme, currentTheme, toggleTheme } from "./theme.js";
+import { toast } from "./toast.js";
+import { countTo, confetti } from "./motion.js";
 
 const escrow = calls(ESCROW_ID);
 const ORDERS_SHOWN = 20;
+const STEPS = ["Choose amount", "Pay with mobile money", "Verify payment", "Receive USDC"];
+const EXPLORER_ACCOUNT = `https://testnet.nearblocks.io/address/${ESCROW_ID}`;
+const RING = 2 * Math.PI * 15.5;
 
-// Read-only mode: `?view=<account>` shows that account's orders without a wallet (nothing can be
-// signed). Everything shown is public chain data anyway.
 const viewParam = new URLSearchParams(location.search).get("view") || "";
 const VIEW_AS = /^[a-z0-9._-]{2,64}$/.test(viewParam) ? viewParam : null;
-/** The account whose orders are shown: the connected wallet, else the read-only one. */
 const who = () => state.account || VIEW_AS;
 
 const state = {
   account: null,
-  config: null, // { token, params, ... }
+  config: null,
   lp: null,
-  released: 0, // this buyer's released orders with this LP (new-buyer rule)
+  released: 0,
   orders: [],
   claimable: 0n,
   busy: false,
   loadError: null,
+  focusId: null,
+  compose: false,
+  menu: false,
+  celebrated: new Set(),
 };
+let amountText = "2";
+let flowKey = null;
+let ordersKey = null;
+let lastLoadError = null;
+let pendingToast = null;
 
-// ---------- tiny DOM helper (text only: chain data never goes through innerHTML) ----------
-function h(tag, attrs = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === false || v == null) continue;
-    if (k === "onclick") el.addEventListener("click", v);
-    else if (k === "oninput") el.addEventListener("input", v);
-    else if (v === true) el.setAttribute(k, "");
-    else el.setAttribute(k, v);
-  }
-  for (const c of children.flat()) if (c != null && c !== false) el.append(c);
-  return el;
-}
-const $ = (id) => document.getElementById(id);
 const nowNs = () => BigInt(Date.now()) * 1_000_000n;
+const fee = () => state.config.params.outlayer_call.fee;
+const safeCheckout = (url) => (typeof url === "string" && url.startsWith("https://checkout.paystack.com/") ? url : null);
 
-function notice(kind, text, txHashes = []) {
-  const links = txHashes.map((t) => h("a", { href: EXPLORER_TX + t, target: "_blank", rel: "noopener" }, "View transaction"));
-  $("notice").replaceChildren(h("div", { class: `banner ${kind}` }, text, links.length ? " " : null, links));
+function maxBuyable() {
+  const { lp, config } = state;
+  let max = BigInt(lp.quote.max_usdc);
+  const cap = (v) => { if (BigInt(v) < max) max = BigInt(v); };
+  cap(lp.liquidity);
+  cap(BigInt(lp.bond) - BigInt(lp.locked));
+  if (who() && state.released < config.params.new_buyer_orders) cap(config.params.new_buyer_cap);
+  return max > 0n ? max : 0n;
 }
 
-// ---------- data ----------
+function focused() {
+  if (!state.config) return null;
+  if (state.compose) return null;
+  const grace = BigInt(state.config.params.t_grace_ns);
+  if (state.focusId != null) {
+    const picked = state.orders.find((o) => String(o.id) === String(state.focusId));
+    if (picked) return picked;
+  }
+  return state.orders.find((o) => {
+    const { screen } = flowScreen(o, nowNs(), grace);
+    return screen === "pay" || screen === "verify";
+  }) || null;
+}
+
 async function load() {
   try {
     if (!state.config) state.config = await view(ESCROW_ID, "get_config");
@@ -77,27 +99,38 @@ async function load() {
   render();
 }
 
-/** Run a wallet action, show what happened, then reload. Errors are shown, never swallowed. */
-async function act(label, calls) {
-  if (state.busy) return;
+async function act(label, txs, meta = {}) {
+  if (state.busy || !state.account) return;
   state.busy = true;
   render();
-  notice("info", `${label}: confirm in your wallet…`);
+  if (pendingToast) pendingToast();
+  pendingToast = toast("pending", `${label}: confirm in your wallet…`);
   try {
-    const hashes = await send(calls);
-    notice("ok", `${label}: sent.`, hashes);
+    const hashes = await send(txs);
+    if (pendingToast) pendingToast();
+    pendingToast = null;
+    const hash = hashes[0];
+    toast("ok", `${label} sent.`, hash ? { href: EXPLORER_TX + hash, text: "View transaction" } : null);
+    if (meta.orderId != null) state.focusId = meta.orderId;
+    state.compose = false;
+    state.lastHash = hash || state.lastHash;
   } catch (e) {
-    notice("bad", `${label} failed: ${e?.message || e}`);
+    if (pendingToast) pendingToast();
+    pendingToast = null;
+    toast("error", humanError(e));
   } finally {
     state.busy = false;
     await load();
+    if (meta.focusNewest && state.orders[0]) {
+      state.focusId = state.orders[0].id;
+      state.compose = false;
+      flowKey = null;
+      render();
+    }
   }
 }
 
-const fee = () => state.config.params.outlayer_call.fee;
-
 async function withdraw() {
-  // The token only pays accounts registered with it (NEP-145), so register first if needed.
   const token = state.config.token;
   const txs = [];
   try {
@@ -107,237 +140,416 @@ async function withdraw() {
       txs.push(storageDeposit(token, state.account, bounds.min));
     }
   } catch (e) {
-    return notice("bad", `Could not check your token registration: ${e.message || e}`);
+    return toast("error", humanError(e));
   }
   txs.push(escrow.withdrawClaimable(state.account));
   await act("Withdraw", txs);
 }
 
-// ---------- rendering ----------
-function renderWallet() {
-  $("wallet").replaceChildren(
-    ...(state.account
-      ? [h("span", { class: "acct", title: state.account }, state.account), h("button", { class: "secondary small", onclick: () => signOut() }, "Sign out")]
-      : [h("button", { class: "primary small", onclick: showWalletModal }, "Connect wallet")]),
+function spinnerButton(label) {
+  return h("button", { class: "primary", disabled: true }, h("span", { class: "spin", "aria-hidden": "true" }), label);
+}
+
+function stepper(step) {
+  return h("ol", { class: "steps", "aria-label": "Buy progress" }, STEPS.map((label, i) => {
+    const n = i + 1;
+    const cls = n < step ? "done" : n === step ? "on" : "";
+    return h("li", { class: cls, "aria-current": n === step ? "step" : false, "aria-label": label },
+      h("span", { class: "dot" }, n < step ? icon("check") : String(n)),
+      h("span", { class: "lbl" }, label),
+    );
+  }));
+}
+
+function claimableBar() {
+  if (!who() || state.claimable === 0n) return null;
+  return h("div", { class: "badge", style: "margin-bottom:16px" },
+    icon("shield"),
+    h("span", {}, `${fmtUsdc(state.claimable)} USDC is ready`, state.account ? "" : " to withdraw"),
+    state.account
+      ? h("button", { class: "primary", style: "width:auto;min-height:44px;margin-left:auto", disabled: state.busy, onclick: withdraw }, "Withdraw")
+      : null,
   );
 }
 
-function maxBuyable() {
-  const { lp, config } = state;
-  let max = BigInt(lp.quote.max_usdc);
-  const cap = (v) => { if (BigInt(v) < max) max = BigInt(v); };
-  cap(lp.liquidity);
-  cap(BigInt(lp.bond) - BigInt(lp.locked)); // bond rule: locked ≤ bond
-  if (who() && state.released < config.params.new_buyer_orders) cap(config.params.new_buyer_cap);
-  return max > 0n ? max : 0n;
+function ring(order) {
+  const windowNs = state.config.params.t_pay_ns;
+  const wrap = h("div", { class: "ring-wrap", "data-deadline": String(order.pay_deadline), "data-window": String(windowNs) });
+  const t = document.createElement("template");
+  t.innerHTML = `<svg viewBox="0 0 36 36" aria-hidden="true"><circle class="track" cx="18" cy="18" r="15.5"/><circle class="value" data-ring="1" cx="18" cy="18" r="15.5"/></svg>`;
+  wrap.append(t.content.firstChild, h("span", { class: "clock num", "data-clock": "1" }, clockLeft(order.pay_deadline, nowNs())));
+  return wrap;
 }
 
-let amountText = "2";
-
-let buyKey = null;
-
-function renderBuy() {
-  const root = $("buy");
-  // Rebuild only when its data changed, so the 5 s refresh never steals focus from the amount field.
-  const key = JSON.stringify([state.account, state.lp, state.released, state.busy, state.loadError && !state.config, !!state.config]);
-  if (key === buyKey) return;
-  buyKey = key;
-  if (state.loadError && !state.config) {
-    return root.replaceChildren(h("div", { class: "banner bad" }, `Could not load the contract: ${state.loadError}`));
-  }
-  if (!state.config) return root.replaceChildren(h("div", { class: "card muted" }, "Loading…"));
+function renderAmount() {
   const lp = state.lp;
-  const head = h("h2", { id: "buy-h" }, "Buy USDC with mobile money");
-  if (!lp) return root.replaceChildren(head, h("div", { class: "card" }, `No seller is registered as ${DEFAULT_LP} on this contract.`));
-
+  if (!lp) {
+    return h("div", { class: "card rise" }, stepper(1), h("h1", {}, "Buy USDC"), h("p", {}, `No seller is registered as ${DEFAULT_LP}.`));
+  }
   const rate = BigInt(lp.quote.rate_pesewas_per_usdc);
   const min = BigInt(lp.quote.min_usdc);
   const max = maxBuyable();
-  const sellerReady = !lp.paused && lp.key_fp && max >= min;
-
+  const self = state.account === DEFAULT_LP;
+  const limits = { min, max, paused: lp.paused, ready: !!lp.key_fp, self };
   const payLine = h("div", { class: "big num" });
-  const hint = h("div", { class: "muted" });
-  const button = h("button", { class: "primary wide" });
+  const issue = h("div", { class: "issue", id: "amount-error", role: "alert" });
+  const button = state.busy ? spinnerButton("Waiting for your wallet…") : h("button", { class: "primary" });
+  let paintChips = () => {};
 
   const update = () => {
+    paintChips();
+    const problem = amountIssue(amountText, limits);
     const units = parseUsdc(amountText);
-    let problem = null;
-    if (!sellerReady) problem = lp.paused ? "This seller is paused." : !lp.key_fp ? "This seller hasn't finished setup." : "This seller has no USDC available right now.";
-    else if (units == null) problem = "Enter an amount, for example 2 or 2.5.";
-    else if (units < min) problem = `The smallest order is ${fmtUsdc(min)} USDC.`;
-    else if (units > max) problem = `The most you can buy now is ${fmtUsdc(max)} USDC.`;
-    const ghs = units != null && units > 0n ? ghsPesewasFor(units, rate) : null;
-    payLine.textContent = ghs != null ? `GHS ${fmtGhs(ghs)}` : "GHS –";
-    hint.textContent = problem || "You have 10 minutes to pay after opening the order.";
-    if (!state.account) {
-      button.textContent = "Connect wallet to buy";
+    const ghs = units != null && units > 0n ? ghsPesewasFor(units, rate) : 0n;
+    countTo(payLine, payLine._n ?? 0n, ghs, (n) => (n > 0n ? `GHS ${fmtGhs(n)}` : "GHS –"));
+    issue.textContent = problem || "";
+    if (state.busy) return;
+    if (self) {
+      button.textContent = "Switch wallet";
       button.disabled = false;
-      button.onclick = showWalletModal;
+      button.onclick = () => { signOut().then(showWalletModal).catch((e) => toast("error", humanError(e))); };
+      return;
+    }
+    if (!state.account) {
+      button.textContent = "Connect wallet";
+      button.disabled = !!problem;
+      button.onclick = () => { if (!amountIssue(amountText, limits)) showWalletModal(); };
     } else {
-      button.textContent = state.busy ? "Waiting for your wallet…" : "Open order";
-      button.disabled = state.busy || !!problem;
-      button.onclick = () =>
-        act("Open order", [escrow.openOrder(DEFAULT_LP, units, ghs)]);
+      button.textContent = "Continue";
+      button.disabled = !!problem;
+      button.onclick = () => {
+        const unitsNow = parseUsdc(amountText);
+        const problemNow = amountIssue(amountText, limits);
+        if (problemNow || unitsNow == null) return;
+        act("Open order", [escrow.openOrder(DEFAULT_LP, unitsNow, ghsPesewasFor(unitsNow, rate))], { focusNewest: true });
+      };
     }
   };
 
   const input = h("input", {
-    id: "amount", inputmode: "decimal", autocomplete: "off", value: amountText,
+    id: "amount", inputmode: "decimal", autocomplete: "off", "aria-describedby": "amount-error",
+    value: amountText,
     oninput: (e) => { amountText = e.target.value; update(); },
   });
+  const chipValues = [1, 2, 5, 10];
+  const chips = chipValues.map((n) => {
+    const units = BigInt(n) * 1_000_000n;
+    return h("button", {
+      class: amountText === String(n) ? "on" : "",
+      disabled: units < min || units > max,
+      onclick: () => { amountText = String(n); input.value = amountText; update(); },
+    }, String(n));
+  });
+  paintChips = () => chips.forEach((btn, i) => btn.classList.toggle("on", amountText === String(chipValues[i])));
   update();
 
-  root.replaceChildren(
-    head,
-    h("div", { class: "card" },
+  return h("div", { class: "card rise" },
+    stepper(1),
+    claimableBar(),
+    h("h1", {}, "Buy USDC"),
+    h("div", { class: "seller" },
       h("div", { class: "row" },
-        h("span", { class: "muted" }, `Seller ${DEFAULT_LP}`),
-        h("span", { class: "muted num" }, `1 USDC = GHS ${fmtGhs(rate)}`),
+        h("span", { class: "name" }, DEFAULT_LP),
+        h("span", { class: "num muted" }, `1 USDC = GHS ${fmtGhs(rate)}`),
       ),
-      h("label", { for: "amount" }, "You get"),
-      h("div", { class: "field" }, input, h("span", {}, "USDC")),
-      h("div", { class: "pay" }, h("div", { class: "muted" }, "You pay by mobile money"), payLine),
-      button,
-      h("p", { class: "muted", style: "margin:10px 0 0" }, hint),
-      h("p", { class: "muted", style: "margin:6px 0 0" },
-        `Seller's bond: ${fmtUsdc(lp.bond)} USDC. Available: ${fmtUsdc(max)} USDC.`),
+      h("div", { class: "badge" }, icon("shield"), `Seller has ${fmtUsdc(lp.bond)} USDC staked as guarantee`),
     ),
+    h("label", { class: "field-label", for: "amount" }, "You receive"),
+    h("div", { class: "amount" }, input, h("span", { class: "unit" }, "USDC")),
+    h("div", { class: "chips", role: "group", "aria-label": "Quick amounts" }, chips),
+    h("div", { class: "payline" }, h("div", { class: "muted" }, "You pay by mobile money"), payLine),
+    issue,
+    button,
+    h("p", { class: "muted", style: "margin:12px 0 0" }, `You have ${payMinutes(state.config.params.t_pay_ns)} minutes to pay after opening the order.`),
   );
 }
 
-function timeLeft(untilNs) {
-  const s = Number((BigInt(untilNs) - nowNs()) / 1_000_000_000n);
-  if (s <= 0) return "0:00";
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+function renderPay(order) {
+  const url = safeCheckout(order.checkout_url);
+  const minutes = payMinutes(state.config.params.t_pay_ns);
+  const primary = state.busy
+    ? spinnerButton("Waiting for your wallet…")
+    : url
+      ? h("a", { class: "primary", href: url, target: "_blank", rel: "noopener" }, "Open Paystack checkout")
+      : h("button", {
+          class: "primary",
+          disabled: !state.account,
+          onclick: () => act("Open Paystack checkout", [escrow.requestCheckout(order.id, fee())], { orderId: order.id }),
+        }, "Open Paystack checkout");
+  return h("div", { class: "card rise" },
+    stepper(2),
+    h("h1", {}, "Pay with mobile money"),
+    ring(order),
+    h("p", { class: "note" }, `Pay GHS ${fmtGhs(order.ghs_amount_pesewas)} for ${fmtUsdc(order.usdc_amount)} USDC.`),
+    h("p", { class: "note muted" }, `Pay with MTN MoMo / Telecel Cash on Paystack's page, then come back. You have ${minutes} minutes from when the order opened.`),
+    primary,
+    h("button", {
+      class: "secondary",
+      disabled: state.busy || !state.account,
+      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id }),
+    }, "I've paid, check payment"),
+  );
 }
-/** A countdown that the 1 s timer updates in place (no re-render, so buttons stay put). */
-const countdown = (untilNs) => h("span", { class: "num", "data-until": String(untilNs) }, timeLeft(untilNs));
 
-/** Only ever link to Paystack's checkout host, whatever the chain says. */
-const safeCheckout = (url) => (typeof url === "string" && url.startsWith("https://checkout.paystack.com/") ? url : null);
-
-function orderCard(o) {
-  const grace = BigInt(state.config.params.t_grace_ns);
-  const step = nextStep(o, nowNs(), grace);
-  const ghs = `GHS ${fmtGhs(o.ghs_amount_pesewas)}`;
-  const btn = (cls, text, onclick) => h("button", { class: cls, disabled: state.busy || !state.account, onclick }, text);
-  const check = (text, cls = "primary") => btn(cls, text, () => act("Check payment", [escrow.claim(o.id, fee())]));
-  let chip, text, actions = [];
-  switch (step) {
-    case "checkout":
-      chip = ["warn", "Step 1 of 3"];
-      text = ["Get your payment link. ", countdown(o.pay_deadline), " left to pay."];
-      actions = [btn("primary", "Get payment link", () => act("Get payment link", [escrow.requestCheckout(o.id, fee())]))];
-      break;
-    case "pay": {
-      chip = ["warn", "Step 2 of 3"];
-      text = [`Pay ${ghs} by mobile money, then come back and check. `, countdown(o.pay_deadline), " left to pay."];
-      const url = safeCheckout(o.checkout_url);
-      actions = [
-        url ? h("a", { class: "btn primary", href: url, target: "_blank", rel: "noopener" }, "Pay with mobile money") : null,
-        check("I've paid: check payment", "secondary"),
-      ];
-      break;
-    }
-    case "check":
-      chip = ["warn", "Time is up"];
-      text = "The time to pay has passed. If you paid in time, check your payment now.";
-      actions = [check("Check payment")];
-      break;
-    case "wait":
-      chip = ["info", "Checking"];
-      text = "Checking your payment with Paystack. This usually takes under a minute.";
-      break;
-    case "recheck":
-      chip = ["warn", "Not confirmed yet"];
-      text = `The payment couldn't be checked (${o.failures} ${o.failures === 1 ? "try" : "tries"}). Check again in a few minutes. If it can never be checked, the seller's bond pays you.`;
-      actions = [check("Check again")];
-      break;
-    case "finalize":
-      chip = ["info", "Paid"];
-      text = "Payment confirmed. The USDC is released after a short safety delay.";
-      actions = [btn("primary", "Finish release", () => act("Finish release", [escrow.finalizeRelease(o.id)]))];
-      break;
-    case "expire":
-      chip = ["bad", "Not paid in time"];
-      text = "No payment was confirmed in time. Closing the order frees the seller's USDC. You are not charged.";
-      actions = [btn("secondary", "Close order", () => act("Close order", [escrow.expireOrder(o.id)]))];
-      break;
-    default:
-      if (o.state === "RELEASED") { chip = ["ok", "Paid"]; text = `Payment confirmed. ${fmtUsdc(o.usdc_amount)} USDC was released to you.`; }
-      else if (o.state === "SLASHED") { chip = ["ok", "Paid from bond"]; text = `The seller's side couldn't be verified, so their bond paid you ${fmtUsdc(o.usdc_amount)} USDC.`; }
-      else { chip = ["bad", "Expired"]; text = "This order expired without a confirmed payment."; }
+function renderVerify(order) {
+  const step = nextStep(order, nowNs(), BigInt(state.config.params.t_grace_ns));
+  let title = "Verifying with Paystack inside a secure enclave…";
+  let body = "This usually takes under a minute. You can leave this page open.";
+  let action = null;
+  if (step === "recheck") {
+    title = "Not confirmed yet";
+    body = `The payment couldn't be checked (${order.failures} ${order.failures === 1 ? "try" : "tries"}). Check again in a few minutes. If it can never be checked, the seller's bond pays you.`;
+    action = h("button", {
+      class: "primary", disabled: state.busy || !state.account,
+      onclick: () => act("Check again", [escrow.claim(order.id, fee())], { orderId: order.id }),
+    }, state.busy ? "Waiting for your wallet…" : "Check again");
+  } else if (step === "check") {
+    title = "The pay window has ended";
+    body = "If you paid in time, we can still check. If not, you can close the order. You are not charged.";
+    action = h("button", {
+      class: "primary", disabled: state.busy || !state.account,
+      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id }),
+    }, state.busy ? "Waiting for your wallet…" : "Check payment");
+  } else if (step === "finalize") {
+    title = "Payment confirmed";
+    body = "The USDC unlocks after a short safety delay, then you can take it to your wallet.";
+    action = h("button", {
+      class: "primary", disabled: state.busy || !state.account,
+      onclick: () => act("Finish release", [escrow.finalizeRelease(order.id)], { orderId: order.id }),
+    }, state.busy ? "Waiting for your wallet…" : "Finish release");
   }
-  return h("div", { class: "card order" },
-    h("div", { class: "row" },
-      h("h3", {}, `${fmtUsdc(o.usdc_amount)} USDC for ${ghs}`),
-      h("span", { class: `chip ${chip[0]}` }, chip[1]),
+  const tipId = `tip-${order.id}`;
+  return h("div", { class: "card rise enclave" },
+    stepper(3),
+    h("div", { class: "orb", "aria-hidden": "true" }, icon("shield")),
+    h("h1", {}, title),
+    h("p", { class: "muted" }, body),
+    action,
+    h("div", { class: "tip" },
+      h("button", { "aria-expanded": "false", "aria-controls": tipId, onclick: (e) => {
+        const open = e.currentTarget.getAttribute("aria-expanded") !== "true";
+        e.currentTarget.setAttribute("aria-expanded", open ? "true" : "false");
+        e.currentTarget.nextElementSibling.hidden = !open;
+      } }, "What is the secure enclave?"),
+      h("p", { id: tipId, hidden: true }, "A program in a secure enclave calls Paystack with the seller's key. The key never leaves that enclave. The contract releases USDC only when Paystack says this order was paid."),
     ),
-    h("p", {}, text),
-    actions.filter(Boolean).length ? h("div", { class: "actions" }, actions) : null,
-    h("p", { class: "ref" }, `Order ${o.id} · ${o.reference}`),
   );
 }
 
-let ordersKey = null;
+function outcome(order, kind) {
+  const amount = `${fmtUsdc(order.usdc_amount)} USDC`;
+  const explorer = state.lastHash
+    ? h("a", { href: EXPLORER_TX + state.lastHash, target: "_blank", rel: "noopener" }, "View the transaction")
+    : h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, "View on the explorer");
+  let title, body, extra = null;
+  if (kind === "success") {
+    title = "USDC received";
+    body = `${amount} was released to you.`;
+  } else if (kind === "slashed") {
+    title = "You're protected";
+    body = `The seller was penalised because their side couldn't be verified. Their bond pays you ${amount}.`;
+  } else if (kind === "expired") {
+    title = "This order expired";
+    body = "No payment was confirmed in time. You are not charged, and closing the order frees the seller's USDC.";
+    if (nextStep(order, nowNs(), BigInt(state.config.params.t_grace_ns)) === "expire") {
+      extra = h("button", {
+        class: "secondary", disabled: state.busy || !state.account,
+        onclick: () => act("Close order", [escrow.expireOrder(order.id)], { orderId: order.id }),
+      }, "Close order");
+    }
+  } else {
+    title = "This order didn't complete";
+    body = "Nothing was taken from you. If you already paid, check the order again from the list below.";
+  }
+  const card = h("div", { class: `card rise success outcome ${kind === "expired" || kind === "failed" ? "bad-card" : ""}` },
+    stepper(kind === "success" || kind === "slashed" ? 4 : 2),
+    kind === "success" || kind === "slashed" ? h("div", { class: "tick", "aria-hidden": "true" }, icon("check")) : null,
+    h("h1", {}, title),
+    h("p", { class: "big num" }, kind === "success" || kind === "slashed" ? amount : ""),
+    h("p", {}, body),
+    kind === "success" && state.claimable > 0n
+      ? h("button", { class: "primary", disabled: state.busy || !state.account, onclick: withdraw }, "Withdraw to my wallet")
+      : null,
+    kind === "slashed" && state.claimable > 0n
+      ? h("button", { class: "primary", disabled: state.busy || !state.account, onclick: withdraw }, "Withdraw to my wallet")
+      : null,
+    extra,
+    h("p", {}, explorer),
+    h("button", { class: "secondary", onclick: () => { state.compose = true; state.focusId = null; flowKey = null; render(); } }, "Buy more"),
+  );
+  return card;
+}
+
+function renderFlow() {
+  const root = $("flow");
+  if (state.loadError && !state.config) {
+    flowKey = null;
+    return root.replaceChildren(h("div", { class: "card" }, h("h1", {}, "Couldn't load OpenRamp"), h("p", {}, "Check your connection and refresh. No money has moved.")));
+  }
+  if (!state.config || !state.lp && state.lp !== null) {
+    return root.replaceChildren(h("div", { class: "card skeleton", "aria-busy": "true", "aria-label": "Loading" },
+      h("div", { class: "sk sk-line" }), h("div", { class: "sk sk-amount" }), h("div", { class: "sk sk-btn" })));
+  }
+  const order = focused();
+  const grace = BigInt(state.config.params.t_grace_ns);
+  const screen = order ? flowScreen(order, nowNs(), grace) : { screen: "amount", step: 1 };
+  const key = JSON.stringify([
+    screen, state.account, state.busy, state.claimable.toString(), state.lp, state.released, order && order.id, order && order.state,
+    order && order.checkout_url, order && order.failures, state.compose, amountText && screen.screen === "amount" ? "amt" : "",
+  ]);
+  if (key === flowKey && screen.screen !== "amount") return;
+  if (screen.screen === "amount" && key === flowKey) return;
+  flowKey = key;
+  const readOnly = VIEW_AS && !state.account
+    ? h("p", { class: "muted" }, `Read-only view of ${VIEW_AS}. Connect that wallet to act.`)
+    : null;
+  let body;
+  if (!order || screen.screen === "amount") body = renderAmount();
+  else if (screen.screen === "pay") body = renderPay(order);
+  else if (screen.screen === "verify") body = renderVerify(order);
+  else body = outcome(order, screen.screen);
+  root.replaceChildren(...[readOnly, body].filter(Boolean));
+  paintClocks();
+}
 
 function renderOrders() {
   const root = $("orders");
   if (!who() || !state.config) { ordersKey = null; return root.replaceChildren(); }
-  // Rebuild only when the data or an order's next step changed: replacing a button while it is
-  // being pressed would swallow the click.
-  const grace = BigInt(state.config.params.t_grace_ns);
-  const key = JSON.stringify([who(), state.account, state.busy, state.orders, state.orders.map((o) => nextStep(o, nowNs(), grace))]);
+  const key = JSON.stringify([who(), state.orders.map((o) => [o.id, o.state, o.usdc_amount])]);
   if (key === ordersKey) return;
   ordersKey = key;
+  const rows = state.orders.length
+    ? state.orders.map((o) => {
+        const pill = statusPill(o.state);
+        return h("div", { class: "order-row" },
+          h("button", {
+            onclick: () => { state.focusId = o.id; state.compose = false; flowKey = null; render(); },
+            "aria-label": `Order ${o.id}, ${pill.label}, ${fmtUsdc(o.usdc_amount)} USDC`,
+          },
+            h("span", { class: `pill ${pill.kind}${pill.kind === "pending" ? " pulse" : ""}` }, pill.label),
+            h("span", { class: "num" }, `${fmtUsdc(o.usdc_amount)} USDC`),
+            h("span", { class: "when" }, timeAgo(o.opened_at, nowNs())),
+          ),
+          h("a", { class: "ext", href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener", "aria-label": `Order ${o.id} on the explorer` }, icon("external")),
+        );
+      })
+    : [h("p", { class: "muted" }, "No orders yet.")];
   root.replaceChildren(
-    h("h2", { id: "orders-h" }, state.account ? "Your orders" : `Orders of ${VIEW_AS}`),
-    state.account ? "" : h("p", { class: "muted", style: "margin:0 0 10px" }, "Read-only view. Connect this account's wallet to act on its orders."),
-    ...(state.orders.length ? state.orders.map(orderCard) : [h("div", { class: "card muted" }, "No orders yet. Open one above.")]),
+    h("h2", { id: "orders-h" }, state.account ? "My orders" : `Orders of ${VIEW_AS}`),
+    h("div", { class: "orders" }, rows),
   );
 }
 
-let claimableKey = null;
-
-function renderClaimable() {
-  const root = $("claimable");
-  const key = [who(), state.account, state.busy, state.claimable].join("|");
-  if (key === claimableKey) return;
-  claimableKey = key;
-  if (!who() || state.claimable === 0n) return root.replaceChildren();
+function renderHow() {
+  const root = $("how");
+  if (root.childElementCount) return;
+  const item = (name, title, text) => h("article", {}, icon(name), h("strong", {}, title), h("p", {}, text));
   root.replaceChildren(
-    h("div", { class: "banner ok" },
-      h("div", { class: "row" },
-        h("strong", {}, `${fmtUsdc(state.claimable)} USDC is ready ${state.account ? "for you" : "to withdraw"}`),
-        h("button", { class: "primary small", disabled: state.busy || !state.account, onclick: withdraw }, "Withdraw to my wallet"),
-      ),
+    h("h2", { id: "how-h" }, "How it works"),
+    h("div", { class: "how-grid" },
+      item("lock", "USDC is locked", "The seller's USDC sits in a contract nobody can change."),
+      item("phone", "You pay MoMo", "Cedis go to the seller on Paystack. Your number stays on their page."),
+      item("shield", "Checked in a secure enclave", "Paystack is asked directly. The seller's key never leaves the enclave."),
+      item("check", "USDC is released", "A match releases the USDC. If the seller can't be checked, their bond pays you."),
     ),
+    h("p", { class: "foot" }, "Each step is a transaction you confirm in your wallet. Keep a little testnet NEAR for fees. ",
+      h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, ESCROW_ID)),
   );
+}
+
+function renderHeader() {
+  const theme = currentTheme();
+  const accountBtn = state.account
+    ? h("button", {
+        class: "wallet", "aria-haspopup": "menu", "aria-expanded": state.menu ? "true" : "false",
+        onclick: () => { state.menu = !state.menu; renderHeader(); },
+      }, h("span", { class: "avatar" }, initial(state.account)), h("span", { class: "acct" }, shortAccount(state.account)))
+    : h("button", { class: "wallet", onclick: showWalletModal }, "Connect");
+  $("top-actions").replaceChildren(
+    h("button", {
+      class: "icon-btn", "aria-label": theme === "dark" ? "Switch to light mode" : "Switch to dark mode",
+      "aria-pressed": theme === "dark" ? "true" : "false",
+      onclick: () => { toggleTheme(); renderHeader(); },
+    }, icon(theme === "dark" ? "sun" : "moon")),
+    accountBtn,
+  );
+  $("top-actions").querySelector(".menu")?.remove();
+  if (state.menu && state.account) {
+    $("top-actions").append(h("div", { class: "menu", role: "menu" },
+      h("button", { role: "menuitem", onclick: () => { state.menu = false; signOut(); } }, "Sign out"),
+    ));
+  }
 }
 
 function render() {
-  renderWallet();
-  renderClaimable();
-  renderBuy();
+  $("mark").replaceChildren(icon("logo"));
+  renderHeader();
+  renderFlow();
   renderOrders();
-  if (state.loadError && state.config) notice("bad", `Could not refresh: ${state.loadError}`);
+  renderHow();
+  if (state.loadError && state.config && state.loadError !== lastLoadError) toast("error", "Couldn't refresh. The last numbers are still on screen.");
+  lastLoadError = state.loadError;
+  queueCelebrate();
 }
 
-// ---------- start ----------
-$("contract-link").replaceChildren(
-  h("a", { href: `https://testnet.nearblocks.io/address/${ESCROW_ID}`, target: "_blank", rel: "noopener" }, `Contract: ${ESCROW_ID}`),
-);
+let celebrateQueued = false;
+function queueCelebrate() {
+  if (celebrateQueued) return;
+  celebrateQueued = true;
+  queueMicrotask(() => {
+    celebrateQueued = false;
+    const order = focused();
+    const card = document.querySelector("#flow .success");
+    if (!order || !card || !state.config || state.celebrated.has(order.id)) return;
+    const screen = flowScreen(order, nowNs(), BigInt(state.config.params.t_grace_ns)).screen;
+    if (screen !== "success" && screen !== "slashed") return;
+    state.celebrated.add(order.id);
+    confetti(card);
+  });
+}
+
+function paintClocks() {
+  const now = nowNs();
+  for (const wrap of document.querySelectorAll("[data-deadline]")) {
+    const frac = ringFraction(wrap.dataset.deadline, wrap.dataset.window, now);
+    const circle = wrap.querySelector("[data-ring]");
+    if (circle) {
+      circle.style.strokeDasharray = String(RING);
+      circle.style.strokeDashoffset = String(RING * (1 - frac));
+    }
+    const clock = wrap.querySelector("[data-clock]");
+    if (clock) clock.textContent = clockLeft(wrap.dataset.deadline, now);
+  }
+}
+
+initTheme();
 render();
 load();
 initWallet((account) => {
   if (account === state.account) return;
   state.account = account;
+  state.menu = false;
   load();
-}).catch((e) => notice("bad", `Wallet setup failed: ${e.message || e}`));
+}).catch((e) => toast("error", humanError(e)));
 
-// Countdowns tick every second; chain data refreshes every 5 s while the tab is visible.
+document.addEventListener("click", (e) => {
+  if (!state.menu) return;
+  if (e.target.closest(".wallet") || e.target.closest(".menu")) return;
+  state.menu = false;
+  renderHeader();
+});
+
 setInterval(() => {
-  for (const el of document.querySelectorAll("[data-until]")) el.textContent = timeLeft(el.dataset.until);
-  if (state.orders.length) renderOrders(); // only rebuilds when a deadline has just passed
+  paintClocks();
+  const order = focused();
+  if (!order || !state.config) return;
+  const grace = BigInt(state.config.params.t_grace_ns);
+  const screen = flowScreen(order, nowNs(), grace).screen;
+  if (screen !== flowKeyScreen(flowKey)) { flowKey = null; renderFlow(); }
 }, 1000);
 setInterval(() => { if (!document.hidden && !state.busy) load(); }, 5000);
+
+function flowKeyScreen(key) {
+  if (!key) return "";
+  try { return JSON.parse(key)[0].screen; } catch { return ""; }
+}
