@@ -9,6 +9,25 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-11 23:30 UTC — OutLayer back; immutability tests, README disclosures, fresh-clone check, CI
+Done:
+- OutLayer testnet answered again at 23:00 GMT (probe "Hello, webtest-d2.ikwame.testnet!"; a second
+  probe also UP). Kwame notified. No order was touched during the outage.
+- Fresh clone of `web/buyer-page` with clean build caches: every README command passes (contracts
+  264 + 5, verifier 20, web 12 + build). README now names the prerequisites (rustup, Node 20+).
+- M1.9 (`36ae36e`): 3 immutability tests, mutation-checked. README: hackathon disclosures (built in
+  the window, libraries, AI-generated code incl. re-authored commits).
+- CI workflow (`3c34213`), not yet run.
+```
+$ cd contracts && cargo test
+test result: ok. 267 passed; 0 failed
+test result: ok. 5 passed; 0 failed
+$ cargo clippy --all-targets   (clean)
+```
+Failed / blocked: none.
+Next (Nov 12): Kwame's full buy with firmstreet.testnet; push + see CI green; merge web/buyer-page;
+Vercel; video; X post; submit (deadline Nov 14 23:59 UTC).
+
 ## 2026-11-11 22:20 UTC — OutLayer testnet outage; page fixes, seller page, README, deploy prep, demo script
 Done:
 - Diagnosed the stuck checkout: OutLayer testnet accepted requests but never ran them

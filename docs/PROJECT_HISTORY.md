@@ -323,7 +323,16 @@ with their PR.
 - **2026-11-11, `e2b3a2c`:** `web/vercel.json` and `docs/DEPLOY_WEB.md` (not deployed).
 - **2026-11-11, `1429c06`:** `docs/DEMO_SCRIPT.md`, live plan and a no-OutLayer fallback.
 - **2026-11-11, `bc6d0c8`:** PROGRESS, PROJECT_HISTORY and DECISIONS (D-026) for the above.
-- **2026-11-11, this commit:** commit IDs above updated after re-authoring the six commits as Kwame (his request; content unchanged).
+- **2026-11-11, `a2f6033`:** commit IDs above updated after re-authoring the six commits as Kwame (his request; content unchanged).
+- **2026-11-11, `36ae36e`:** M1.9 immutability tests (`contracts/escrow/src/immutability_tests.rs`): the public
+  method list is pinned and has no settings setter; no code writes token / OutLayer / verifier /
+  params / deploy tag after `new`; the settings are identical after every kind of flow.
+  Mutation-checked (a planted nested write and a planted `self.token =` both fail the tests).
+  Also README: the disclosures the hackathon rules require (work built in the window, libraries,
+  AI-generated code including commits re-authored as Kwame) and Rust/Node prerequisites.
+- **2026-11-11, `3c34213`:** GitHub Actions workflow `.github/workflows/tests.yml` (contracts, verifier, web).
+  Not yet seen running: it needs a push.
+- **2026-11-11, this commit:** PROGRESS / PROJECT_HISTORY for the above.
 
 ---
 
@@ -403,7 +412,8 @@ Short form. Full context in `docs/DECISIONS.md`.
 - **Escrow full-access keys are not removed** after deploy (M2.7). The testnet escrows are
   upgradeable by whoever holds the key. The README says so; the plan is to delete the key on the
   final deploy (D-026).
-- **No CI** (M2.9 cut). Merges rely on local `cargo test` and clippy runs; GitHub shows no checks.
+- **CI added but not yet seen green.** `.github/workflows/tests.yml` runs on push; until a run passes,
+  merges rely on local `cargo test` and clippy. The README keeps "No CI" until then.
 - **Provider plug-in is only partly there.** D-002 and AGENTS.md describe a `PaymentProvider`
   interface, but the verifier is Paystack-only with no such trait in the code.
 - **Real-buyer email** (per-order alias) is design only.
@@ -433,5 +443,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-11. Covers all commits up to and including `bc6d0c8` (branch `web/buyer-page`), plus the
-commit that updates the commit IDs after re-authoring.
+2026-11-11. Covers all commits up to and including `3c34213` (branch `web/buyer-page`), plus the
+commit that records them.
