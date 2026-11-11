@@ -73,6 +73,9 @@ You need a NEAR **testnet** account in Meteor or Intear Wallet with about **1 te
 (each step is a transaction; most of the fee comes back). The seller on this deploy is
 `ikwame.testnet`, so buy from any other account.
 
+Prerequisites: [Rust via rustup](https://rustup.rs) (the repo pins 1.97.0 and rustup installs it
+on first use) and Node.js 20 or newer.
+
 ```bash
 cd web && npm install && npm run dev
 ```
@@ -83,7 +86,7 @@ checkout** → pay on Paystack's page with Mobile Money, MTN, test number **0551
 
 - `?view=<account>` shows any account's orders read-only; `?seller` shows the seller's bond,
   liquidity, open orders and key fingerprint.
-- Tests: `cd contracts && cargo test` (264 + 5), `cd verifier && cargo test` (20),
+- Tests: `cd contracts && cargo test` (267 + 5), `cd verifier && cargo test` (20),
   `cd web && npm test` (12). Rust is pinned by `rust-toolchain.toml` (1.97.0).
 - Scripts for your own deploy: `scripts/deploy-testnet.sh`, `scripts/lp-setup.sh`, `scripts/buy.sh`.
 
@@ -109,6 +112,42 @@ checkout** → pay on Paystack's page with Mobile Money, MTN, test number **0551
   its sha256 is fixed in the contract.
 - **The escrow account still has a full-access key** on this testnet deploy, so whoever holds it
   could replace the code. The final deploy removes it; see "Upgrade keys" below.
+
+## Built during the hackathon
+
+Everything in this repository was written during the build window: the first commit is
+`ee31eb5` on 2026-11-01 14:52 UTC. There is no pre-hackathon baseline.
+
+**NEAR integration built in the window** (this is what is judged):
+- `contracts/escrow`: the escrow contract on NEAR testnet. It handles buy orders, seller bonds
+  and liquidity in a NEP-141 token, timeouts, slashing, claimable payouts and NEP-297 events.
+  It has no owner and is initialised once by itself.
+- OutLayer calls from the contract: `request_execution` with the fixed verifier wasm, plus
+  callbacks that never trust the payload (`contracts/escrow/src/outlayer.rs`).
+- `verifier/`: the OutLayer program that checks Paystack inside the enclave.
+- `contracts/mock-ft`: a test-only NEP-141 mock USDC.
+- `web/`: NEAR Wallet Selector login, wallet-signed contract calls, and JSON-RPC reads.
+- `scripts/`: testnet deploy, LP setup and buyer scripts.
+
+**Libraries and tools** (versions pinned in the lockfiles):
+- Contracts: `near-sdk` 5.30 and `near-contract-standards` 5.30.
+- Verifier: `serde`, `serde_json`, `sha2` 0.10, `wasi-http-client` 0.2.
+- Web: `@near-wallet-selector/core`, `modal-ui-js`, `meteor-wallet` and `intear-wallet` 10.1.4;
+  `@near-js/transactions` 2.5.1; `buffer` 6.0.3; Vite 8.
+- Tooling: cargo-near 0.22, near-cli-rs, the OutLayer CLI.
+- Template: `scripts/test-a/hello` started from `outlayer create hello` (a feasibility test only,
+  not part of the product).
+
+**AI-generated code.** Most of the code, tests and docs were written by AI coding agents,
+directed and reviewed by Kwame (the team):
+- **Claude Code** (Anthropic) wrote most of the repository: the contract, verifier, scripts, web
+  page and docs. Commits authored "Claude" are its work. Some later commits under Kwame's name
+  were also written by Claude Code and re-authored at his request: `d332367` and the commits from
+  `9b2eb39` to `a2f6033`.
+- **Cursor** wrote the buyer-page redesign in `0fcfee0`.
+- **Kwame** made the product and design decisions, set up the accounts, keys and Paystack /
+  OutLayer secrets, ran the manual tests (including the real Paystack checkout payment), and
+  reviewed and merged the pull requests. GitHub merge commits under his name are those merges.
 
 ## Upgrade keys
 

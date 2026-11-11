@@ -84,8 +84,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       M2.2. Check: tests with time travel.
 - [x] M1.7 [must] Books check (inv. 6) as ONE test across all flows: contract balance ≥ owed (not =;
       stray mUSDC can be sent to the escrow). Check: test passes.
-- [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
+- [x] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
+      (Nov 11: `immutability_tests.rs`: pinned public-method list with no settings setter; no code
+      writes the settings after `new`; settings identical after every kind of flow. Mutation-checked.)
 - [ ] M1.10 [nice] Anti-griefing for experienced buyers (T7): small order fee paid to the LP on
       expiry, or a per-buyer limit on concurrent open orders.
 - [ ] M1.8 (PR #12 review) also measure the gas of the slash-inside-the-verdict path, next to PAID.
@@ -194,6 +196,8 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       limit and its residual risk (D-012), production = licensed LPs + Act 1154,
       libraries/AI code used, licensing note (Act 1154), limitations.
 - [ ] M5.2 Fresh clone → setup → demo from scratch; fix breakages.
+      (Nov 11, partial: fresh clone of web/buyer-page, clean caches: all README test and build
+      commands pass; README now lists Rust + Node prerequisites. Still to do: the demo part, by a person.)
 - [ ] M5.3 Secret scan of git history (repo is already public, D-008: also scan now and before every
       merge); LICENSE check.
 - [ ] M5.4 Demo video (2 min) + X post tagging @NEARProtocol #NEARHackathon [K posts].

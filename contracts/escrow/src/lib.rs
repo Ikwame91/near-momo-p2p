@@ -34,6 +34,8 @@ mod slash_tests;
 mod books_tests;
 #[cfg(test)]
 mod outlayer_tests;
+#[cfg(test)]
+mod immutability_tests;
 
 #[near]
 #[derive(BorshStorageKey)]
