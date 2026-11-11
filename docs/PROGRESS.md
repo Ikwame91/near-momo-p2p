@@ -9,6 +9,34 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-11 22:20 UTC — OutLayer testnet outage; page fixes, seller page, README, deploy prep, demo script
+Done:
+- Diagnosed the stuck checkout: OutLayer testnet accepted requests but never ran them
+  ("Execution promise failed … Refunded", tx 8iehM5r8Caw2KghuZjCvEE2E1GqCbFWDvW3zY7ma2JBK, a
+  script call with no page or wallet involved). Our wasm URL serves the right hash. Kwame confirmed
+  other projects failed too. Probe (hello wasm, no order touched) every 30 min until 00:00 GMT,
+  resumes 07:00.
+- Page: enclave waiting text, plain "didn't answer" message, 1 NEAR note (`a765257`); read-only
+  seller page `?seller` (`fc71045`); judge README + wasm hash fix (`204e684`); Vercel config and
+  steps, not deployed (`3f6b2fb`); demo script with fallback (`49f3586`).
+```
+$ cd web && npm test
+# pass 12
+# fail 0
+$ npm ci && npm run build   (fresh copy from git)
+✓ built in 415ms
+```
+Failed / blocked:
+- OutLayer down: no live checkout or check possible. Order 4 (firmstreet.testnet) UNVERIFIED
+  with 2 failures (21:55:18, 21:57:26), left alone. Kwame's full buy with firmstreet still open.
+Next: when the probe reports UP, Kwame's full buy (M4.2); merge web/buyer-page; Vercel deploy
+(ask first); video.
+Gotchas:
+- A 300 TGas call needs ~0.31 NEAR free in the wallet up front; 0.5 NEAR total was not enough
+  after opening an order.
+- `outlayer run` from ikwame.testnet fails at 0.17 NEAR; the probe signs as webtest-d2 through a
+  separate outlayer config in the scratchpad.
+
 ## 2026-11-11 — Review of the Cursor redesign + five fixes (UI only)
 Done:
 - Reviewed `0fcfee0` (made with Cursor): calls.js / near.js unchanged, no new packages, bundle

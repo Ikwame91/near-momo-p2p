@@ -328,6 +328,20 @@ Alternatives: React + a NEAR starter template (more code and dependencies than o
 near-api-js `WalletConnection` redirect flow (tied to MyNearWallet, now closed); a page that holds
 a private key in the browser (rejected: never ask users for keys).
 
+## D-026 Seller page read-only; escrow full-access key deleted on the final deploy (Nov 11, 2026)
+Status: accepted (Kwame's Nov 11 list)
+- The seller (LP) page is read-only (`?seller`): bond, liquidity, locked, open orders, key
+  fingerprint, quote, orders. LP actions (register, deposit, fingerprint, withdraw) stay in
+  `scripts/lp-setup.sh`. Reason: a read-only page needs no new contract calls and nothing that
+  touches OutLayer; LPs in this demo are operators, not end users.
+- `escrow-d2` keeps its full-access key while we iterate on testnet; the README says so plainly.
+  The final deploy deletes it after checking the on-chain code hash, so the code can never
+  change; bugs are then fixed by deploying a new escrow. Alternative: keep the key and state the
+  upgrade trust (rejected for the final deploy: it weakens "nobody can change the rules").
+- During an OutLayer outage nobody calls `claim` or `request_checkout` (a check that can't be
+  verified counts toward a slash, by design, D-012); OutLayer is probed with a hello-world run
+  that touches no order.
+
 ## D-025 Buyer page redesign stays in the UI layer (Nov 11, 2026)
 Status: accepted
 Context: the first buyer page worked against escrow-d2 but looked like a raw form. The redesign

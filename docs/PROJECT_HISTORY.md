@@ -294,7 +294,7 @@ with their PR.
   - Checked: `npm test` (10) and `npm run build`. Bundle grew about 20 KB. Screenshots in
     `docs/screenshots/buyer-redesign/`.
   - Still open: the happy path needs a buyer account that is not the seller (M4.2).
-- **2026-11-11, this commit:** five fixes from reviewing the redesign.
+- **2026-11-11, `d332367`:** five fixes from reviewing the redesign (authored as Kwame at his request).
   - Expired orders are neutral grey, not error red (pill and card); the expired card's tracker
     shows where the order stopped with no step marked current, and its text says whether the
     seller's USDC is already unlocked.
@@ -307,6 +307,22 @@ with their PR.
     its pay window and grace have passed, without waiting for other data to change.
   - Files: `web/src/main.js`, `format.js` (+ test), `style.css`, `dom.js`, after-screenshots.
   - Checked: `npm test` (10), build, browser run with no console errors. Not changed: `calls.js`, `near.js`.
+- **2026-11-11, OutLayer testnet outage (no commit).** From about 21:50 GMT OutLayer accepted
+  requests but its worker never ran them ("Execution promise failed … Refunded" after ~2 min);
+  Kwame confirmed other projects failed too. firmstreet.testnet's order 4 got two "couldn't
+  verify" failures (21:55, 21:57) and is left alone. A probe (hello-world run, no order touched)
+  checks OutLayer every 30 min until midnight GMT and again from 07:00.
+- **2026-11-11, `a765257`:** the page says "Checking with the secure enclave… this can take up to
+  2 minutes" while OutLayer works, explains an empty answer ("The verification service didn't
+  answer. Your money is safe. Try again in a few minutes."), and asks for 1 testnet NEAR (0.5 was
+  too little: a 300 TGas call needs ~0.31 NEAR free). Files: `web/src/main.js`, `format.js` (+ test).
+- **2026-11-11, `fc71045`:** read-only seller page (`?seller`), M4.3 (D-026). Files: `web/src/seller.js`,
+  `main.js`, `format.js` (+ test), `style.css`, `docs/screenshots/seller-page.png`.
+- **2026-11-11, `204e684`:** README rewritten for judges (how it works, testnet proof, how to try,
+  honest limits, upgrade-key plan); `wasm/README.md` hash fixed to `ecc0515c…`.
+- **2026-11-11, `3f6b2fb`:** `web/vercel.json` and `docs/DEPLOY_WEB.md` (not deployed).
+- **2026-11-11, `49f3586`:** `docs/DEMO_SCRIPT.md`, live plan and a no-OutLayer fallback.
+- **2026-11-11, this commit:** PROGRESS, PROJECT_HISTORY and DECISIONS (D-026) for the above.
 
 ---
 
@@ -341,6 +357,7 @@ Short form. Full context in `docs/DECISIONS.md`.
 | D-023 | `sha2` for `key_fp` in the verifier | Don't hand-write SHA-256 | Hand-written SHA-256 |
 | D-024 | Web page in plain JS + Vite + NEAR Wallet Selector (Meteor, Intear); no MyNearWallet; calls kept in one file and checked with a test key | One page doesn't need a framework; MyNearWallet closed app connections on Nov 1 | React starter; redirect-wallet flow; key in the browser |
 | D-025 | Buyer page redesign stays in the UI layer: CSS motion, no new packages | Keep the same contract calls and stay inside a ~100 KB bundle budget | `motion` npm package; editing `calls.js` or the wallet setup |
+| D-026 | Read-only seller page; delete the escrow's full-access key on the final deploy; no checks during an OutLayer outage | No new calls for the LP page; "nobody can change the rules" must hold; a failed check counts toward a slash | LP actions in the page; keep the key and state the trust |
 
 **Choices made in commits but not (yet) in DECISIONS.md**
 - **Escrow deploy + `new` in one transaction signed by the escrow account** (`8262b81`). From
@@ -366,9 +383,13 @@ Short form. Full context in `docs/DECISIONS.md`.
   Meteor showed that panic as raw JSON. The page now blocks that account before the wallet opens.
   A different testnet account, with a little NEAR, still has to open, pay, check and withdraw.
 - The web page shows one seller only (`VITE_DEFAULT_LP`): the escrow has no "list LPs" view.
-- LP screen (M4.3), hosting (M4.5) and README draft (M5.1) are not started; `web/` is on branch
-  `web/buyer-page`, not merged.
-- `ikwame.testnet` is down to about 0.2 NEAR; it needs a faucet top-up before another deploy.
+- **OutLayer testnet is down (since ~21:50 GMT Nov 11).** Nothing that needs it can be shown live
+  until it returns; the demo script has a fallback. Order 4 (firmstreet) is UNVERIFIED with 2
+  failures; nobody should call `claim` on it until OutLayer works.
+- Hosting (M4.5) is prepared (`web/vercel.json`, `docs/DEPLOY_WEB.md`) but not deployed; `web/` is
+  on branch `web/buyer-page`, not merged.
+- `ikwame.testnet` is down to about 0.17 NEAR; it needs a faucet top-up before another deploy.
+  Test accounts were funded from `escrow-d1` (superseded deploy) and `buyer-d2`.
 - `npm install` in `web/` reports audit warnings from the wallet libraries' dependencies; not reviewed.
 - Test-day tasks still open: M1.8 near-workspaces sandbox tests (including the gas of the
   slash-in-verdict path), M1.9 immutability tests, M5.2 fresh-clone run, M2.5 hostile review.
@@ -379,8 +400,8 @@ Short form. Full context in `docs/DECISIONS.md`.
     build too (M2.6).
   - Nobody else can yet rebuild them to the same hash.
 - **Escrow full-access keys are not removed** after deploy (M2.7). The testnet escrows are
-  upgradeable by whoever holds the key; the "no owner" claim holds only once the key is deleted
-  or the upgrade trust is documented.
+  upgradeable by whoever holds the key. The README says so; the plan is to delete the key on the
+  final deploy (D-026).
 - **No CI** (M2.9 cut). Merges rely on local `cargo test` and clippy runs; GitHub shows no checks.
 - **Provider plug-in is only partly there.** D-002 and AGENTS.md describe a `PaymentProvider`
   interface, but the verifier is Paystack-only with no such trait in the code.
@@ -411,5 +432,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-11. Covers all commits up to and including `0fcfee0` (branch `web/buyer-page`), plus the
-commit with the five review fixes to the redesign.
+2026-11-11. Covers all commits up to and including `49f3586` (branch `web/buyer-page`), plus the
+commit that records them (PROGRESS, PROJECT_HISTORY, DECISIONS D-026).
