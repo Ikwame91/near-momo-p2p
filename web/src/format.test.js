@@ -59,12 +59,18 @@ test("guided screen and stepper step", () => {
   assert.deepEqual(flowScreen(o({ state: "EXPIRED" }), now, grace), { screen: "expired", step: 2 });
 });
 
-test("status pills", () => {
-  assert.deepEqual(statusPill("RELEASED"), { kind: "ok", label: "Paid" });
-  assert.deepEqual(statusPill("AWAITING_PAYMENT"), { kind: "pending", label: "Pending" });
-  assert.deepEqual(statusPill("VERIFYING"), { kind: "pending", label: "Pending" });
-  assert.deepEqual(statusPill("EXPIRED"), { kind: "bad", label: "Expired" });
-  assert.deepEqual(statusPill("SLASHED"), { kind: "ok", label: "Slashed" });
+test("status pills (expired is neutral, never error red)", () => {
+  const now = 1_000n, grace = 10n;
+  const o = (x) => ({ state: "AWAITING_PAYMENT", checkout_url: null, pay_deadline: "2000", claim_until: null, ...x });
+  assert.deepEqual(statusPill(o({ state: "RELEASED" }), now, grace), { kind: "ok", label: "Paid" });
+  assert.deepEqual(statusPill(o({}), now, grace), { kind: "pending", label: "Pending" });
+  assert.deepEqual(statusPill(o({ state: "VERIFYING" }), now, grace), { kind: "pending", label: "Pending" });
+  assert.deepEqual(statusPill(o({ state: "EXPIRED" }), now, grace), { kind: "neutral", label: "Expired" });
+  assert.deepEqual(statusPill(o({ state: "SLASHED" }), now, grace), { kind: "ok", label: "Slashed" });
+  // still AWAITING_PAYMENT on-chain but past pay_deadline + grace: nothing left to do but expire
+  assert.deepEqual(statusPill(o({ pay_deadline: "900" }), now, grace), { kind: "neutral", label: "Expired" });
+  // past the deadline but inside grace: can still be checked, so still pending
+  assert.deepEqual(statusPill(o({ pay_deadline: "995" }), now, grace), { kind: "pending", label: "Pending" });
 });
 
 test("time ago and short account", () => {

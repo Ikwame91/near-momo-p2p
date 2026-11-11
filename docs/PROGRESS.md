@@ -9,6 +9,24 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-11 — Review of the Cursor redesign + five fixes (UI only)
+Done:
+- Reviewed `0fcfee0` (made with Cursor): calls.js / near.js unchanged, no new packages, bundle
+  +21 KB, tests and build pass, no console errors in dev or build. Clicked through real orders:
+  pay (countdown + Paystack link, d2 order 3), paid, expired, slashed (escrow-d1 orders) all render.
+- Fixed: (1) expired is neutral grey, not red, and its tracker shows no current step; (2) header on
+  one row; (3) a cancelled open no longer jumps to an old order; (4) explorer links are per order;
+  (5) the orders list follows the clock (time ago, Pending → Expired).
+```
+$ cd web && npm test
+# pass 10
+# fail 0
+$ npx vite build
+✓ built in 474ms
+```
+Failed / blocked: none. Still open: M4.2 happy path with a buyer account that is not the seller.
+Next: Kwame's run with a non-seller Meteor account; LP screen (M4.3); hosting (M4.5); README.
+
 ## 2026-11-11 06:50 UTC — Buyer page redesign (UI only; M4.2 manual run still open)
 Done:
 - Redesigned `web/` on `web/buyer-page`: centered card, light/dark, 4-step buyer flow, live

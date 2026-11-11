@@ -43,6 +43,18 @@ let ordersKey = null;
 let lastLoadError = null;
 let pendingToast = null;
 
+// The latest transaction this browser sent for each order, so an order's explorer link points at
+// its own transaction (not whatever was sent last). Kept per contract; works without storage.
+const TX_KEY = `openramp.tx.${ESCROW_ID}`;
+let txByOrder = {};
+try { txByOrder = JSON.parse(localStorage.getItem(TX_KEY) || "{}") || {}; } catch { txByOrder = {}; }
+function rememberTx(orderId, hash) {
+  if (orderId == null || !hash) return;
+  txByOrder[String(orderId)] = hash;
+  try { localStorage.setItem(TX_KEY, JSON.stringify(txByOrder)); } catch { /* this visit only */ }
+}
+const orderTx = (order) => txByOrder[String(order.id)] || null;
+
 const nowNs = () => BigInt(Date.now()) * 1_000_000n;
 const fee = () => state.config.params.outlayer_call.fee;
 const safeCheckout = (url) => (typeof url === "string" && url.startsWith("https://checkout.paystack.com/") ? url : null);
@@ -102,6 +114,8 @@ async function load() {
 async function act(label, txs, meta = {}) {
   if (state.busy || !state.account) return;
   state.busy = true;
+  let sentHash = null;
+  let ok = false;
   render();
   if (pendingToast) pendingToast();
   pendingToast = toast("pending", `${label}: confirm in your wallet…`);
@@ -109,11 +123,13 @@ async function act(label, txs, meta = {}) {
     const hashes = await send(txs);
     if (pendingToast) pendingToast();
     pendingToast = null;
-    const hash = hashes[0];
+    const hash = hashes[hashes.length - 1]; // the escrow call is always the last one sent
     toast("ok", `${label} sent.`, hash ? { href: EXPLORER_TX + hash, text: "View transaction" } : null);
     if (meta.orderId != null) state.focusId = meta.orderId;
     state.compose = false;
-    state.lastHash = hash || state.lastHash;
+    rememberTx(meta.orderId, hash);
+    sentHash = hash;
+    ok = true;
   } catch (e) {
     if (pendingToast) pendingToast();
     pendingToast = null;
@@ -121,7 +137,9 @@ async function act(label, txs, meta = {}) {
   } finally {
     state.busy = false;
     await load();
-    if (meta.focusNewest && state.orders[0]) {
+    // Only after a successful open: a cancelled or failed open stays on the amount screen.
+    if (ok && meta.focusNewest && state.orders[0]) {
+      rememberTx(state.orders[0].id, sentHash);
       state.focusId = state.orders[0].id;
       state.compose = false;
       flowKey = null;
@@ -150,11 +168,13 @@ function spinnerButton(label) {
   return h("button", { class: "primary", disabled: true }, h("span", { class: "spin", "aria-hidden": "true" }), label);
 }
 
-function stepper(step) {
-  return h("ol", { class: "steps", "aria-label": "Buy progress" }, STEPS.map((label, i) => {
+/** `ended`: the order stopped at `step` (e.g. expired), so steps before it are done and none is current. */
+function stepper(step, ended = false) {
+  return h("ol", { class: `steps${ended ? " ended" : ""}`, "aria-label": "Buy progress" }, STEPS.map((label, i) => {
     const n = i + 1;
-    const cls = n < step ? "done" : n === step ? "on" : "";
-    return h("li", { class: cls, "aria-current": n === step ? "step" : false, "aria-label": label },
+    const current = n === step && !ended;
+    const cls = n < step ? "done" : current ? "on" : "";
+    return h("li", { class: cls, "aria-current": current ? "step" : false, "aria-label": label },
       h("span", { class: "dot" }, n < step ? icon("check") : String(n)),
       h("span", { class: "lbl" }, label),
     );
@@ -338,9 +358,10 @@ function renderVerify(order) {
 
 function outcome(order, kind) {
   const amount = `${fmtUsdc(order.usdc_amount)} USDC`;
-  const explorer = state.lastHash
-    ? h("a", { href: EXPLORER_TX + state.lastHash, target: "_blank", rel: "noopener" }, "View the transaction")
-    : h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, "View on the explorer");
+  const tx = orderTx(order);
+  const explorer = tx
+    ? h("a", { href: EXPLORER_TX + tx, target: "_blank", rel: "noopener" }, "View the transaction")
+    : h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, "View the contract on the explorer");
   let title, body, extra = null;
   if (kind === "success") {
     title = "USDC received";
@@ -350,7 +371,9 @@ function outcome(order, kind) {
     body = `The seller was penalised because their side couldn't be verified. Their bond pays you ${amount}.`;
   } else if (kind === "expired") {
     title = "This order expired";
-    body = "No payment was confirmed in time. You are not charged, and closing the order frees the seller's USDC.";
+    body = order.state === "EXPIRED"
+      ? "No payment was confirmed in time. You weren't charged, and the seller's USDC has been unlocked."
+      : "No payment was confirmed in time. You aren't charged. Closing the order unlocks the seller's USDC.";
     if (nextStep(order, nowNs(), BigInt(state.config.params.t_grace_ns)) === "expire") {
       extra = h("button", {
         class: "secondary", disabled: state.busy || !state.account,
@@ -361,8 +384,10 @@ function outcome(order, kind) {
     title = "This order didn't complete";
     body = "Nothing was taken from you. If you already paid, check the order again from the list below.";
   }
-  const card = h("div", { class: `card rise success outcome ${kind === "expired" || kind === "failed" ? "bad-card" : ""}` },
-    stepper(kind === "success" || kind === "slashed" ? 4 : 2),
+  const finished = kind === "success" || kind === "slashed";
+  const card = h("div", { class: `card rise outcome${finished ? " success" : " ended"}` },
+    finished ? stepper(4) : stepper(2, true),
+    finished ? null : h("div", { class: "end-icon", "aria-hidden": "true" }, icon("clock")),
     kind === "success" || kind === "slashed" ? h("div", { class: "tick", "aria-hidden": "true" }, icon("check")) : null,
     h("h1", {}, title),
     h("p", { class: "big num" }, kind === "success" || kind === "slashed" ? amount : ""),
@@ -415,12 +440,17 @@ function renderFlow() {
 function renderOrders() {
   const root = $("orders");
   if (!who() || !state.config) { ordersKey = null; return root.replaceChildren(); }
-  const key = JSON.stringify([who(), state.orders.map((o) => [o.id, o.state, o.usdc_amount])]);
+  const now = nowNs();
+  const grace = BigInt(state.config.params.t_grace_ns);
+  const pills = new Map(state.orders.map((o) => [o.id, statusPill(o, now, grace)]));
+  // The key holds what is shown, including "time ago" and the pill, so the 1 s timer below
+  // rebuilds the list only when one of those has actually changed.
+  const key = JSON.stringify([who(), state.orders.map((o) => [o.id, o.state, o.usdc_amount, pills.get(o.id).label, timeAgo(o.opened_at, now), orderTx(o)])]);
   if (key === ordersKey) return;
   ordersKey = key;
   const rows = state.orders.length
     ? state.orders.map((o) => {
-        const pill = statusPill(o.state);
+        const pill = pills.get(o.id);
         return h("div", { class: "order-row" },
           h("button", {
             onclick: () => { state.focusId = o.id; state.compose = false; flowKey = null; render(); },
@@ -428,9 +458,12 @@ function renderOrders() {
           },
             h("span", { class: `pill ${pill.kind}${pill.kind === "pending" ? " pulse" : ""}` }, pill.label),
             h("span", { class: "num" }, `${fmtUsdc(o.usdc_amount)} USDC`),
-            h("span", { class: "when" }, timeAgo(o.opened_at, nowNs())),
+            h("span", { class: "when" }, timeAgo(o.opened_at, now)),
           ),
-          h("a", { class: "ext", href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener", "aria-label": `Order ${o.id} on the explorer` }, icon("external")),
+          h("a", {
+            class: "ext", href: orderTx(o) ? EXPLORER_TX + orderTx(o) : EXPLORER_ACCOUNT, target: "_blank", rel: "noopener",
+            "aria-label": orderTx(o) ? `Order ${o.id}: view its transaction on the explorer` : `Order ${o.id}: view the contract on the explorer`,
+          }, icon("external")),
         );
       })
     : [h("p", { class: "muted" }, "No orders yet.")];
@@ -541,6 +574,7 @@ document.addEventListener("click", (e) => {
 
 setInterval(() => {
   paintClocks();
+  if (state.config) renderOrders(); // only rebuilds when a pill or "time ago" changed
   const order = focused();
   if (!order || !state.config) return;
   const grace = BigInt(state.config.params.t_grace_ns);

@@ -278,13 +278,13 @@ with their PR.
   - Checked: loads against escrow-d2 in a browser; every call it makes was sent with a throwaway
     test key and accepted by the escrow (tx links in PROGRESS Session 5b).
   - Files: `web/*`, `docs/screenshots/buyer-page.png`, README, DECISIONS (D-024), PLAN, PROGRESS.
-- **2026-11-10, this commit:** fix: the page stayed blank under `npm run dev`.
+- **2026-11-10, `eb0674b`:** fix: the page stayed blank under `npm run dev`.
   - Why: `@near-js/accounts` reads `process.env` when it loads; the production build replaces it,
     the dev server does not (`ReferenceError: process is not defined`). Kwame hit it on his first run;
     my earlier checks had only used the production build.
   - Fix: `web/src/buffer-shim.js` also provides an empty `process.env`. Checked both
     `npm run dev` and the built page in a browser.
-- **2026-11-11, this commit:** buyer page redesigned as a guided fintech flow (D-025).
+- **2026-11-11, `0fcfee0`:** buyer page redesigned as a guided fintech flow (D-025). Made with Cursor.
   - What: four-step tracker, live USDC/GHS amount, Paystack countdown from `t_pay_ns`, enclave
     verify state, separate success / expired / failed / slashed cards, toasts, orders list, light
     and dark. The seller account is refused before the wallet opens.
@@ -294,6 +294,19 @@ with their PR.
   - Checked: `npm test` (10) and `npm run build`. Bundle grew about 20 KB. Screenshots in
     `docs/screenshots/buyer-redesign/`.
   - Still open: the happy path needs a buyer account that is not the seller (M4.2).
+- **2026-11-11, this commit:** five fixes from reviewing the redesign.
+  - Expired orders are neutral grey, not error red (pill and card); the expired card's tracker
+    shows where the order stopped with no step marked current, and its text says whether the
+    seller's USDC is already unlocked.
+  - The header stays on one row (it wrapped under the logo, even on desktop).
+  - A cancelled or failed "open order" stays on the amount screen; before, the page jumped to the
+    newest old order.
+  - Each order's explorer link points at that order's own last transaction from this browser
+    (kept per contract in local storage); before, every card linked the last transaction sent.
+  - The orders list follows the clock: "time ago" updates, and an unpaid order reads Expired once
+    its pay window and grace have passed, without waiting for other data to change.
+  - Files: `web/src/main.js`, `format.js` (+ test), `style.css`, `dom.js`, after-screenshots.
+  - Checked: `npm test` (10), build, browser run with no console errors. Not changed: `calls.js`, `near.js`.
 
 ---
 
@@ -398,5 +411,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-11. Covers all commits up to and including `ac69961` (branch `web/buyer-page`), the blank-page
-fix, and this commit's buyer-page redesign.
+2026-11-11. Covers all commits up to and including `0fcfee0` (branch `web/buyer-page`), plus the
+commit with the five review fixes to the redesign.

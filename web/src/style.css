@@ -13,6 +13,8 @@
   --pending-bg: #fff4df;
   --bad: #9d1c1c;
   --bad-bg: #fdecea;
+  --neutral: #4d5c55;
+  --neutral-bg: #edf1ee;
   --ok: #0b6b45;
   --ok-bg: #e6f5ee;
   --focus: #0b6b45;
@@ -43,6 +45,8 @@
     --pending-bg: #3a2c10;
     --bad: #ffb4a8;
     --bad-bg: #3f221e;
+    --neutral: #b3c0b9;
+    --neutral-bg: #232d28;
     --ok: #7ddeb0;
     --ok-bg: #143528;
     --focus: #7ddeb0;
@@ -63,6 +67,8 @@
   --pending-bg: #3a2c10;
   --bad: #ffb4a8;
   --bad-bg: #3f221e;
+  --neutral: #b3c0b9;
+  --neutral-bg: #232d28;
   --ok: #7ddeb0;
   --ok-bg: #143528;
   --focus: #7ddeb0;
@@ -84,11 +90,12 @@ button, input, a { font: inherit; color: inherit; }
 
 .top, main { width: 100%; max-width: 440px; margin: 0 auto; padding-left: var(--s2); padding-right: var(--s2); }
 .top {
-  position: relative;
-  display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap;
+  position: relative; max-width: 720px;
+  display: flex; align-items: center; gap: var(--s1); flex-wrap: nowrap;
   padding-top: var(--s2); padding-bottom: var(--s2);
 }
-.brand { display: flex; align-items: center; gap: var(--s1); font-weight: 700; letter-spacing: -0.02em; }
+.brand { display: flex; align-items: center; gap: var(--s1); font-weight: 700; letter-spacing: -0.02em; flex: none; }
+.top .spacer { flex: 1; min-width: 0; }
 .mark {
   width: 32px; height: 32px; border-radius: 9px; background: var(--brand); color: var(--brand-ink);
   display: grid; place-items: center;
@@ -101,8 +108,9 @@ button, input, a { font: inherit; color: inherit; }
 .pill.pending { background: var(--pending-bg); color: var(--pending); }
 .pill.ok { background: var(--ok-bg); color: var(--ok); }
 .pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.neutral { background: var(--neutral-bg); color: var(--neutral); }
 .pill.pulse { animation: pulse 400ms var(--ease) infinite alternate; }
-.top-actions { position: relative; display: flex; align-items: center; gap: var(--s1); margin-left: auto; }
+.top-actions { position: relative; display: flex; align-items: center; gap: var(--s1); margin-left: auto; flex: none; }
 
 .icon-btn, .wallet {
   min-height: 44px; min-width: 44px;
@@ -234,7 +242,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .tick .icon { width: 36px; height: 36px; }
 .tick path { stroke-dasharray: 32; stroke-dashoffset: 32; animation: draw 400ms var(--ease) forwards; }
-.outcome.bad-card { border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+.outcome { text-align: center; position: relative; }
+.outcome .big { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; margin: 0; }
+.outcome .big:empty { display: none; }
+.end-icon {
+  width: 72px; height: 72px; margin: 0 auto var(--s2); border-radius: 50%;
+  background: var(--neutral-bg); color: var(--neutral); display: grid; place-items: center;
+}
+.end-icon .icon { width: 34px; height: 34px; }
 .outcome h1 { font-size: 1.25rem; }
 
 .orders { display: grid; gap: var(--s1); }
@@ -286,6 +301,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 
 @media (max-width: 420px) {
+  .top { padding-left: 12px; padding-right: 12px; gap: 6px; }
   .pill.testnet { font-size: 0; }
   .pill.testnet::after { content: "Testnet"; font-size: 0.75rem; }
   .wallet .acct { display: none; }

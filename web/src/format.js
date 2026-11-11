@@ -59,14 +59,17 @@ export function flowScreen(order, nowNs, graceNs) {
   return { screen: "failed", step: 3 };
 }
 
-/** Pill for the order list. Pending covers every state that is still in progress. */
-export function statusPill(state) {
-  switch (state) {
-    case "RELEASED": return { kind: "ok", label: "Paid" };
-    case "SLASHED": return { kind: "ok", label: "Slashed" };
-    case "EXPIRED": return { kind: "bad", label: "Expired" };
-    default: return { kind: "pending", label: "Pending" };
-  }
+/**
+ * Pill for the order list. Uses the clock like flowScreen, so an order whose pay window and grace
+ * have passed reads "Expired" even before someone closes it on-chain. Expired is neutral grey:
+ * red is kept for errors.
+ */
+export function statusPill(order, nowNs, graceNs) {
+  const { screen } = flowScreen(order, nowNs, graceNs);
+  if (screen === "success") return { kind: "ok", label: "Paid" };
+  if (screen === "slashed") return { kind: "ok", label: "Slashed" };
+  if (screen === "expired") return { kind: "neutral", label: "Expired" };
+  return { kind: "pending", label: "Pending" };
 }
 
 /** "2m ago" from two nanosecond timestamps. */
