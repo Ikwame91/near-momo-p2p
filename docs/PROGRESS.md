@@ -16,9 +16,9 @@ Done:
   script call with no page or wallet involved). Our wasm URL serves the right hash. Kwame confirmed
   other projects failed too. Probe (hello wasm, no order touched) every 30 min until 00:00 GMT,
   resumes 07:00.
-- Page: enclave waiting text, plain "didn't answer" message, 1 NEAR note (`a765257`); read-only
-  seller page `?seller` (`fc71045`); judge README + wasm hash fix (`204e684`); Vercel config and
-  steps, not deployed (`3f6b2fb`); demo script with fallback (`49f3586`).
+- Page: enclave waiting text, plain "didn't answer" message, 1 NEAR note (`9b2eb39`); read-only
+  seller page `?seller` (`ac619f3`); judge README + wasm hash fix (`0adf503`); Vercel config and
+  steps, not deployed (`e2b3a2c`); demo script with fallback (`1429c06`).
 ```
 $ cd web && npm test
 # pass 12

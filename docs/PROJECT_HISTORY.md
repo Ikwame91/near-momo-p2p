@@ -312,17 +312,18 @@ with their PR.
   Kwame confirmed other projects failed too. firmstreet.testnet's order 4 got two "couldn't
   verify" failures (21:55, 21:57) and is left alone. A probe (hello-world run, no order touched)
   checks OutLayer every 30 min until midnight GMT and again from 07:00.
-- **2026-11-11, `a765257`:** the page says "Checking with the secure enclave… this can take up to
+- **2026-11-11, `9b2eb39`:** the page says "Checking with the secure enclave… this can take up to
   2 minutes" while OutLayer works, explains an empty answer ("The verification service didn't
   answer. Your money is safe. Try again in a few minutes."), and asks for 1 testnet NEAR (0.5 was
   too little: a 300 TGas call needs ~0.31 NEAR free). Files: `web/src/main.js`, `format.js` (+ test).
-- **2026-11-11, `fc71045`:** read-only seller page (`?seller`), M4.3 (D-026). Files: `web/src/seller.js`,
+- **2026-11-11, `ac619f3`:** read-only seller page (`?seller`), M4.3 (D-026). Files: `web/src/seller.js`,
   `main.js`, `format.js` (+ test), `style.css`, `docs/screenshots/seller-page.png`.
-- **2026-11-11, `204e684`:** README rewritten for judges (how it works, testnet proof, how to try,
+- **2026-11-11, `0adf503`:** README rewritten for judges (how it works, testnet proof, how to try,
   honest limits, upgrade-key plan); `wasm/README.md` hash fixed to `ecc0515c…`.
-- **2026-11-11, `3f6b2fb`:** `web/vercel.json` and `docs/DEPLOY_WEB.md` (not deployed).
-- **2026-11-11, `49f3586`:** `docs/DEMO_SCRIPT.md`, live plan and a no-OutLayer fallback.
-- **2026-11-11, this commit:** PROGRESS, PROJECT_HISTORY and DECISIONS (D-026) for the above.
+- **2026-11-11, `e2b3a2c`:** `web/vercel.json` and `docs/DEPLOY_WEB.md` (not deployed).
+- **2026-11-11, `1429c06`:** `docs/DEMO_SCRIPT.md`, live plan and a no-OutLayer fallback.
+- **2026-11-11, `bc6d0c8`:** PROGRESS, PROJECT_HISTORY and DECISIONS (D-026) for the above.
+- **2026-11-11, this commit:** commit IDs above updated after re-authoring the six commits as Kwame (his request; content unchanged).
 
 ---
 
@@ -432,5 +433,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-11. Covers all commits up to and including `49f3586` (branch `web/buyer-page`), plus the
-commit that records them (PROGRESS, PROJECT_HISTORY, DECISIONS D-026).
+2026-11-11. Covers all commits up to and including `bc6d0c8` (branch `web/buyer-page`), plus the
+commit that updates the commit IDs after re-authoring.
