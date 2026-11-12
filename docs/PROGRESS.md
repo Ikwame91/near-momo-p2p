@@ -9,6 +9,16 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-12 — Merged to main (PR #16) and hosted on Vercel (M4.5)
+Done:
+- PR #16 (web page, judge README, M1.9 tests, CI) merged into main as `e5c9098`; CI green on main
+  (run 43283351866).
+- Kwame deployed `web/` from main on Vercel: https://near-momo-p2p.vercel.app. Fresh headless
+  browser check: HTTP 200; price GHS 15.00 and "Seller has 50 USDC staked as guarantee" load;
+  Connect opens the wallet picker (Meteor, Intear); `?seller` shows "Can sell right now 48 USDC";
+  `?view=firmstreet.testnet` shows order 6 Paid; no console errors.
+Next: demo video (Plan A, on the live URL), X post, submission form.
+
 ## 2026-11-12 18:35 UTC — M4.2 done: a person bought USDC through the web page
 Done:
 - Kwame, in his own browser with Meteor as `firmstreet.testnet` (not the seller), on escrow-d2:

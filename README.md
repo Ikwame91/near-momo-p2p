@@ -8,6 +8,8 @@ has asked the payment provider directly: "did this buyer pay this order?" If the
 can't be verified, the seller's staked bond pays the buyer. There is no owner, no admin and no
 dispute desk: the rules are in the contract.
 
+**Try it live: https://near-momo-p2p.vercel.app** (NEAR testnet; seller view: [`?seller`](https://near-momo-p2p.vercel.app/?seller)).
+
 First market: Ghana (MTN MoMo, Telecel Cash). Built for the NEAR Hackathon 2026, track
 Real-World Money. **Testnet and Paystack test mode only: no real money moves.**
 
@@ -76,7 +78,7 @@ the page with `?view=firmstreet.testnet`, or call `get_order` with `{"order_id":
 
 ## Try it
 
-You need a NEAR **testnet** account in Meteor or Intear Wallet with about **1 testnet NEAR**
+Open **https://near-momo-p2p.vercel.app**, or run it locally (below). You need a NEAR **testnet** account in Meteor or Intear Wallet with about **1 testnet NEAR**
 (each step is a transaction; most of the fee comes back). The seller on this deploy is
 `ikwame.testnet`, so buy from any other account.
 

@@ -184,7 +184,9 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       open orders, can-sell-now, quote, key fingerprint status, the LP's orders. Registering and
       depositing stay in `scripts/lp-setup.sh`; no LP transactions from the page.)
 - [ ] M4.4 [nice] Seller screen (the CLI + lp-service script with tx links can show the sell flow). Check: manual run.
-- [ ] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.
+- [x] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.
+      (Nov 12: https://near-momo-p2p.vercel.app, Vercel Hobby, root `web`, deployed by Kwame from `main`.
+      Fresh-browser check: price, seller card, wallet picker, `?seller`, `?view=` all load; no console errors.)
 
 ## Stretch (only if M2 is done by Nov 9)
 - [x] ~~S1 `agent-api/` x402 endpoint~~ DROPPED (D-010): needs real payouts.

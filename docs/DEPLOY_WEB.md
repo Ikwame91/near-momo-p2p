@@ -1,5 +1,8 @@
 # Deploy the web page (Vercel, free Hobby plan)
 
+**Live:** https://near-momo-p2p.vercel.app (deployed Nov 12 from `main`, root directory `web`).
+Every push to `main` redeploys it.
+
 The page in `web/` is a static site: `npm run build` writes `web/dist`, and Vercel serves it.
 No server, no secrets: it reads public chain data over NEAR RPC, and every action is signed in the
 visitor's own wallet. `web/vercel.json` holds the build settings (Vite, `npm ci`, `npm run build`,

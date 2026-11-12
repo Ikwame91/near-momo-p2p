@@ -340,7 +340,10 @@ with their PR.
 - **2026-11-12, `c9d3317`:** README drops "No CI" and shows the CI badge (CI green again).
 - **2026-11-12, M4.2 done (no code change).** Kwame bought 1 USDC through the web page with Meteor as
   firmstreet.testnet: d2 order 6, real Paystack checkout, paid, RELEASED, withdrawn (PROGRESS Nov 12).
-- **2026-11-12, this commit:** PLAN / PROGRESS / PROJECT_HISTORY / README record it.
+- **2026-11-12, `4be7942`:** PLAN / PROGRESS / PROJECT_HISTORY / README record it.
+- **2026-11-12, `e5c9098`:** PR #16 merged: web page, judge README, M1.9 tests and CI are on `main`.
+- **2026-11-12, Vercel (no commit):** Kwame deployed `web/` from `main`: https://near-momo-p2p.vercel.app.
+- **2026-11-12, this commit:** README, PLAN (M4.5), DEPLOY_WEB, PROGRESS link the live site.
 
 ---
 
@@ -399,8 +402,7 @@ Short form. Full context in `docs/DECISIONS.md`.
 - **M4.2 done (Nov 12):** a person bought USDC through the page with Meteor (d2 order 6).
 - The web page shows one seller only (`VITE_DEFAULT_LP`): the escrow has no "list LPs" view.
 - **Depends on OutLayer testnet uptime.** It was down Nov 11 ~21:50–23:00 GMT; the page explains an empty answer, and the demo script has a fallback.
-- Hosting (M4.5) is prepared (`web/vercel.json`, `docs/DEPLOY_WEB.md`) but not deployed; `web/` is
-  on branch `web/buyer-page`, not merged.
+- **Hosted:** https://near-momo-p2p.vercel.app (Vercel Hobby, from `main`). Keep it up through Nov 25.
 - `ikwame.testnet` is down to about 0.17 NEAR; it needs a faucet top-up before another deploy.
   Test accounts were funded from `escrow-d1` (superseded deploy) and `buyer-d2`.
 - `npm install` in `web/` reports audit warnings from the wallet libraries' dependencies; not reviewed.
@@ -447,5 +449,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-12. Covers all commits up to and including `c9d3317` (branch `web/buyer-page`), plus the
-commit that records the web-page purchase (M4.2).
+2026-11-12. Covers all commits up to and including `e5c9098` (`main`), plus the commit that adds
+the live link.
