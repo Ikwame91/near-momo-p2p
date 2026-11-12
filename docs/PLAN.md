@@ -84,8 +84,10 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       M2.2. Check: tests with time travel.
 - [x] M1.7 [must] Books check (inv. 6) as ONE test across all flows: contract balance ≥ owed (not =;
       stray mUSDC can be sent to the escrow). Check: test passes.
-- [ ] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
+- [x] M1.9 Immutability: no setter for verifier/token/OutLayer id; `ft_on_transfer` rejects other
       tokens (inv. 9, T26; token check + tests already done in M1.2). Check: tests.
+      (Nov 11: `immutability_tests.rs`: pinned public-method list with no settings setter; no code
+      writes the settings after `new`; settings identical after every kind of flow. Mutation-checked.)
 - [ ] M1.10 [nice] Anti-griefing for experienced buyers (T7): small order fee paid to the LP on
       expiry, or a per-buyer limit on concurrent open orders.
 - [ ] M1.8 (PR #12 review) also measure the gas of the slash-inside-the-verdict path, next to PAID.
@@ -162,14 +164,25 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
 - [ ] M3.3 [nice] `settlement/`: withdraw released USDC to Base via 1Click (per D on SPEC Q4). Check: tx links.
 
 ## M4 Web demo (Nov 9–11)
-- [ ] M4.1 `web/` scaffold with NEAR wallet login. Check: runs locally.
+- [x] M4.1 `web/` scaffold with NEAR wallet login. Check: runs locally. (Nov 10: Vite page, wallet
+      selector with Meteor + Intear, D-024. The modal and wallet popup open; wallet sites block
+      automated browsers, so the login click-through is for Kwame's manual run.)
 - [ ] M4.6 Demo script shows four outcomes live: PAID → release; NOT_PAID (wrong amount / wrong
       recipient); UNVERIFIABLE `LP_FAULT` → slash; provider down → window extended to
       `T_outage_max`, honest LP protected (D-012). Trigger for the outage case: sell flow → pawaPay
       sandbox number 233593456129 returns IN_RECONCILIATION (observed in Test B2); buy flow → TBD
       (likely the labelled simulated provider returning `server_error`). Check: recorded run.
-- [ ] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
-- [ ] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
+- [x] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
+      (Nov 10: built; every call the page makes was sent to escrow-d2 with a test key via
+      `web/scripts/check-calls.mjs`. Nov 11: page redesigned, screenshots in
+      `docs/screenshots/buyer-redesign/`. STILL OPEN: Kwame's manual run with a wallet that is
+      not the seller. `ikwame.testnet` cannot buy from itself.)
+      (Nov 12: DONE. Kwame bought 1 USDC through the page with Meteor as firmstreet.testnet:
+      d2 order 6 opened 18:27:07, real Paystack checkout, paid, checked 18:28:09 → RELEASED, withdrawn.)
+- [x] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
+      (Nov 11: read-only seller page at `?seller` / `?seller=<account>`: bond, liquidity, locked,
+      open orders, can-sell-now, quote, key fingerprint status, the LP's orders. Registering and
+      depositing stay in `scripts/lp-setup.sh`; no LP transactions from the page.)
 - [ ] M4.4 [nice] Seller screen (the CLI + lp-service script with tx links can show the sell flow). Check: manual run.
 - [ ] M4.5 Host demo (keep up until Nov 25). Check: public URL works from a fresh browser.
 
@@ -185,6 +198,8 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       limit and its residual risk (D-012), production = licensed LPs + Act 1154,
       libraries/AI code used, licensing note (Act 1154), limitations.
 - [ ] M5.2 Fresh clone → setup → demo from scratch; fix breakages.
+      (Nov 11, partial: fresh clone of web/buyer-page, clean caches: all README test and build
+      commands pass; README now lists Rust + Node prerequisites. Still to do: the demo part, by a person.)
 - [ ] M5.3 Secret scan of git history (repo is already public, D-008: also scan now and before every
       merge); LICENSE check.
 - [ ] M5.4 Demo video (2 min) + X post tagging @NEARProtocol #NEARHackathon [K posts].

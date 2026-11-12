@@ -9,6 +9,141 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-12 18:35 UTC — M4.2 done: a person bought USDC through the web page
+Done:
+- Kwame, in his own browser with Meteor as `firmstreet.testnet` (not the seller), on escrow-d2:
+  order 6 (1 USDC = GHS 15.00, ref opr-ad88e13b-6) opened 18:27:07 → enclave created the Paystack
+  checkout (https://checkout.paystack.com/tcxl4gla934xobo) → paid with test MoMo → check claimed
+  18:28:09, attempt 1, 0 failures → RELEASED → withdrawn: firmstreet.testnet holds 1 mUSDC,
+  claimable 0. Read back with `get_order 6`, `get_claimable`, `ft_balance_of`.
+- Order 4 (from the outage) is EXPIRED, no failures recorded against the seller's bond.
+- CI green on `web/buyer-page` (runs 43277945976 and 43278321450).
+Failed / blocked: none. (Explorer API returns no tx lists, so this entry cites on-chain state.)
+Next: merge web/buyer-page into main; Vercel (Kwame clicks); video (Plan A); X post; submit.
+
+## 2026-11-11 23:30 UTC — OutLayer back; immutability tests, README disclosures, fresh-clone check, CI
+Done:
+- OutLayer testnet answered again at 23:00 GMT (probe "Hello, webtest-d2.ikwame.testnet!"; a second
+  probe also UP). Kwame notified. No order was touched during the outage.
+- Fresh clone of `web/buyer-page` with clean build caches: every README command passes (contracts
+  264 + 5, verifier 20, web 12 + build). README now names the prerequisites (rustup, Node 20+).
+- M1.9 (`36ae36e`): 3 immutability tests, mutation-checked. README: hackathon disclosures (built in
+  the window, libraries, AI-generated code incl. re-authored commits).
+- CI workflow (`3c34213`), not yet run.
+```
+$ cd contracts && cargo test
+test result: ok. 267 passed; 0 failed
+test result: ok. 5 passed; 0 failed
+$ cargo clippy --all-targets   (clean)
+```
+Failed / blocked: none.
+Next (Nov 12): Kwame's full buy with firmstreet.testnet; push + see CI green; merge web/buyer-page;
+Vercel; video; X post; submit (deadline Nov 14 23:59 UTC).
+
+## 2026-11-11 22:20 UTC — OutLayer testnet outage; page fixes, seller page, README, deploy prep, demo script
+Done:
+- Diagnosed the stuck checkout: OutLayer testnet accepted requests but never ran them
+  ("Execution promise failed … Refunded", tx 8iehM5r8Caw2KghuZjCvEE2E1GqCbFWDvW3zY7ma2JBK, a
+  script call with no page or wallet involved). Our wasm URL serves the right hash. Kwame confirmed
+  other projects failed too. Probe (hello wasm, no order touched) every 30 min until 00:00 GMT,
+  resumes 07:00.
+- Page: enclave waiting text, plain "didn't answer" message, 1 NEAR note (`9b2eb39`); read-only
+  seller page `?seller` (`ac619f3`); judge README + wasm hash fix (`0adf503`); Vercel config and
+  steps, not deployed (`e2b3a2c`); demo script with fallback (`1429c06`).
+```
+$ cd web && npm test
+# pass 12
+# fail 0
+$ npm ci && npm run build   (fresh copy from git)
+✓ built in 415ms
+```
+Failed / blocked:
+- OutLayer down: no live checkout or check possible. Order 4 (firmstreet.testnet) UNVERIFIED
+  with 2 failures (21:55:18, 21:57:26), left alone. Kwame's full buy with firmstreet still open.
+Next: when the probe reports UP, Kwame's full buy (M4.2); merge web/buyer-page; Vercel deploy
+(ask first); video.
+Gotchas:
+- A 300 TGas call needs ~0.31 NEAR free in the wallet up front; 0.5 NEAR total was not enough
+  after opening an order.
+- `outlayer run` from ikwame.testnet fails at 0.17 NEAR; the probe signs as webtest-d2 through a
+  separate outlayer config in the scratchpad.
+
+## 2026-11-11 — Review of the Cursor redesign + five fixes (UI only)
+Done:
+- Reviewed `0fcfee0` (made with Cursor): calls.js / near.js unchanged, no new packages, bundle
+  +21 KB, tests and build pass, no console errors in dev or build. Clicked through real orders:
+  pay (countdown + Paystack link, d2 order 3), paid, expired, slashed (escrow-d1 orders) all render.
+- Fixed: (1) expired is neutral grey, not red, and its tracker shows no current step; (2) header on
+  one row; (3) a cancelled open no longer jumps to an old order; (4) explorer links are per order;
+  (5) the orders list follows the clock (time ago, Pending → Expired).
+```
+$ cd web && npm test
+# pass 10
+# fail 0
+$ npx vite build
+✓ built in 474ms
+```
+Failed / blocked: none. Still open: M4.2 happy path with a buyer account that is not the seller.
+Next: Kwame's run with a non-seller Meteor account; LP screen (M4.3); hosting (M4.5); README.
+
+## 2026-11-11 06:50 UTC — Buyer page redesign (UI only; M4.2 manual run still open)
+Done:
+- Redesigned `web/` on `web/buyer-page`: centered card, light/dark, 4-step buyer flow, live
+  USDC/GHS amount, pay countdown from `t_pay_ns`, verify state, outcome cards, toasts, orders list.
+- `calls.js` and `near.js` unchanged. No new npm packages. Bundle about +20 KB.
+- The connected account is refused before the wallet opens when it is the seller
+  (`ikwame.testnet` on this deploy).
+```
+$ cd web && npm test
+# pass 10
+# fail 0
+$ npm run build
+✓ built
+```
+Failed / blocked:
+- Kwame's Meteor run as `ikwame.testnet` was rejected by the contract: an LP cannot buy from
+  itself. Meteor showed the panic as raw JSON. The happy path (open → pay → check → withdraw)
+  still needs a different testnet account.
+Next: Kwame connects a buyer account that is not the LP, then M4.3 LP screen, M4.5 hosting, README.
+Gotchas:
+- Meteor's own error popup cannot be restyled. Blocking self-buy on the page is what keeps that
+  raw JSON from appearing.
+- Headless Chrome on this machine would not lay out at a real 375 CSS px; fit was checked by
+  forcing the page width and measuring the card.
+
+## 2026-11-10 18:00 UTC — Session 5b: web buyer page (M4.1 done, M4.2 built, manual wallet run open)
+Done:
+- `web/`: plain JS + Vite page (D-024). Shows the LP's live quote, opens orders, gets the Paystack
+  link, checks the payment, closes unpaid orders, withdraws (registers the buyer on the token first
+  if needed). `?view=<account>` = read-only view. Money maths in `src/format.js` (BigInt, 4 tests).
+- Verified in headless Chromium against escrow-d2: page loads live data, light and dark; wallet
+  modal opens and the Meteor popup launches with a login request.
+- Every call the page makes (`src/calls.js`) sent with a throwaway key (webtest-d2.ikwame.testnet,
+  `scripts/check-calls.mjs`): open (How3ksKDNjdXANGypFZ12oXCmfL7MnWxEpjvXjwbzj5C), request_checkout
+  → real Paystack URL (4RndW4v4sLRHj69GEc5E3bL4p1vM976NP67jrbWz9z6b), claim → NOT_PAID
+  (5ctr5tiedsoyTfqhfR8g5j6UJzwvsUf84fsLxsdEFx9a), expire (CW15DDwjihoSNhN45tjRduEQks6hxnA78AftAMRo35rT);
+  order 2: open, test charge, claim → released (9WCoPJJz9E6vhRVhPDfnHmDqiZXwRKpr3R5QzyELpjur),
+  storage_deposit + withdraw (8L49odSnxJAcqg56Go5R7wqLB2Tyn1ST1vsqyPHiEJpw), balance 1 mUSDC.
+```
+$ cd web && npm test
+# pass 4
+# fail 0
+$ npx vite build
+✓ built in 461ms
+```
+Failed / blocked:
+- Could not click through a wallet myself: MyNearWallet is in "limited mode" (no new app
+  connections since Nov 1), Meteor's site blocks the cloud browser, Intear's picker did not open a
+  popup in headless. Stopped after these tries; the wallet step needs Kwame's manual run.
+Next: Kwame runs the page with a testnet wallet (Meteor or Intear); then M4.3 LP screen, M4.5 hosting, README.
+Gotchas:
+- Browser needs `Buffer` and `global` shims for the NEAR wallet libraries (src/buffer-shim.js, vite.config.js).
+- Paystack's charge API answers "Duplicate Transaction Reference" once a checkout exists for the
+  reference: after request_checkout, payment can only happen on the checkout page.
+- A signed call with 300 TGas needs ~0.31 NEAR free in the account up front. ikwame.testnet is down
+  to ~0.2 NEAR: top it up from the faucet before the next deploy.
+- Screenshots caught a rendering bug (order cards shown as "[object HTMLDivElement]"); fixed.
+
 ## 2026-11-10 17:30 UTC — Session 5: PAID through the real Paystack checkout page on d2 (M2.3b)
 Done (escrow-d2.ikwame.testnet, verifier ecc0515c…, deploy_tag ad88e13b; d2 deploy tx
 87GcoZAa7FGSD1ST9vCcPt47FzmtyD5nMonMCXYWUk89 on Nov 4):

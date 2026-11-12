@@ -308,3 +308,48 @@ Context: `key_fp = sha256(key)` (SPEC §3.1, T24) must be computed inside the TE
 Decision: `sha2` 0.10 (RustCrypto, https://github.com/RustCrypto/hashes) in `verifier/`. The Test A
 prototype in `scripts/test-a/paystack-verify` stays as a record; `verifier/` is the real program.
 Alternatives: hand-written SHA-256 (rejected: easy to get wrong).
+
+## D-024 Web page stack: plain JavaScript + Vite + NEAR Wallet Selector (Nov 10, 2026)
+Status: accepted
+Context: M4 needs a buyer page with wallet login. Every buyer step attaches NEAR (order storage,
+OutLayer fee), so a function-call access key is not enough; the wallet must confirm each step.
+Decision: `web/` is a static page in plain JavaScript (no UI framework), built with Vite 8.
+New dependencies, all pinned to exact versions:
+- `@near-wallet-selector/core`, `modal-ui-js`, `meteor-wallet`, `intear-wallet` 10.1.4
+  (https://github.com/near/wallet-selector): the standard way to let users pick a NEAR wallet.
+- `@near-js/transactions` 2.5.1: builds the function-call actions the selector expects.
+- `buffer` 6.0.3: the wallet libraries need Node's `Buffer` in the browser.
+MyNearWallet is not offered: its testnet site says it entered "limited mode" on Nov 1 2026 with
+new app connections switched off (seen in a browser test on Nov 10). All contract calls the page
+makes live in `web/src/calls.js`; `web/scripts/check-calls.mjs` signs the same calls with a test
+key, because wallet sites block automated browsers, so the wallet click-through itself can only
+be tested by a person. Reads use plain JSON-RPC `fetch` (no SDK). No function-call key is created.
+Alternatives: React + a NEAR starter template (more code and dependencies than one page needs);
+near-api-js `WalletConnection` redirect flow (tied to MyNearWallet, now closed); a page that holds
+a private key in the browser (rejected: never ask users for keys).
+
+## D-026 Seller page read-only; escrow full-access key deleted on the final deploy (Nov 11, 2026)
+Status: accepted (Kwame's Nov 11 list)
+- The seller (LP) page is read-only (`?seller`): bond, liquidity, locked, open orders, key
+  fingerprint, quote, orders. LP actions (register, deposit, fingerprint, withdraw) stay in
+  `scripts/lp-setup.sh`. Reason: a read-only page needs no new contract calls and nothing that
+  touches OutLayer; LPs in this demo are operators, not end users.
+- `escrow-d2` keeps its full-access key while we iterate on testnet; the README says so plainly.
+  The final deploy deletes it after checking the on-chain code hash, so the code can never
+  change; bugs are then fixed by deploying a new escrow. Alternative: keep the key and state the
+  upgrade trust (rejected for the final deploy: it weakens "nobody can change the rules").
+- During an OutLayer outage nobody calls `claim` or `request_checkout` (a check that can't be
+  verified counts toward a slash, by design, D-012); OutLayer is probed with a hello-world run
+  that touches no order.
+
+## D-025 Buyer page redesign stays in the UI layer (Nov 11, 2026)
+Status: accepted
+Context: the first buyer page worked against escrow-d2 but looked like a raw form. The redesign
+brief asked for a fintech layout, motion, and human errors, without changing contract calls.
+Decision: the new layout, theme, toasts and stepper live in `web/src/main.js`, `style.css`,
+`dom.js`, `theme.js`, `toast.js` and `motion.js`. Motion is CSS and the Web Animations API.
+No new npm package. `calls.js` and `near.js` are unchanged, including deposits, gas, RPC reads
+and the wallet-selector setup. If the connected account is the seller, the page refuses the
+order before the wallet opens.
+Alternatives: the `motion` package (would spend the bundle budget); changing call arguments to
+make the self-buy case succeed (the contract forbids it).

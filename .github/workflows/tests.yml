@@ -1,0 +1,43 @@
+# Runs the same checks as the README: contract, verifier and web tests, plus the web build.
+# Rust comes from rust-toolchain.toml (rustup on the runner installs 1.97.0 on first use).
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo test (escrow + mock token)
+        working-directory: contracts
+        run: cargo test
+
+  verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo test (OutLayer verifier)
+        working-directory: verifier
+        run: cargo test
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: npm ci, test, build
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+          npm run build

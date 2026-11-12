@@ -29,6 +29,7 @@ their designs and sandbox proofs stay in the docs.
 | Verifier (TEE program) | Rust → `wasm32-wasip2`, serde_json, sha2 0.10, wasi-http-client 0.2, `verifier/` |
 | TEE / oracle | OutLayer (`outlayer.testnet`), `request_execution` + callback |
 | Payment provider | Paystack test mode API (`/transaction/initialize`, `/transaction/verify`) |
+| Web page | Plain JavaScript, Vite 8, NEAR Wallet Selector 10.1.4 (Meteor, Intear), `web/` (D-024) |
 | Tooling | Rust 1.97.0 pinned (`rust-toolchain.toml`), cargo-near 0.22.0, near-cli-rs, outlayer CLI |
 | Network | NEAR testnet |
 
@@ -42,6 +43,8 @@ cd verifier && cargo test
 cd contracts/escrow && cargo near build non-reproducible-wasm   # same in contracts/mock-ft
 # build the verifier wasm and print its sha256
 cd verifier && sh build.sh
+# web page (buyer): dev server, tests, static build
+cd web && npm install && npm run dev      # npm test, npm run build
 ```
 Testnet (needs `NEAR_ACCOUNT_ID`, `NEAR_PRIVATE_KEY`; see `.env.example`):
 1. `VERIFIER_URL=<raw GitHub URL pinned to a commit> VERIFIER_HASH=<sha256> scripts/deploy-testnet.sh <tag>`
@@ -74,11 +77,19 @@ Testnet (needs `NEAR_ACCOUNT_ID`, `NEAR_PRIVATE_KEY`; see `.env.example`):
 - **Scripts:**
   - `scripts/deploy-testnet.sh`, `lp-setup.sh` and `buy.sh` for testnet;
   - `scripts/test-a` and `scripts/test-b` hold the feasibility tests (records, not product code).
-- **Not built:** `web/` (M4), `settlement/` (cut), `agent-api/` (dropped, D-010).
+- **Web page** (`web/`, buyer only so far):
+  - `src/main.js`: the buyer flow (amount, pay, verify, outcome) and the orders list;
+  - `src/style.css`: design tokens, light and dark;
+  - `src/calls.js`: every contract call the page makes, as plain data (unchanged by the redesign);
+  - `src/near.js`: reads over JSON-RPC, signing through the wallet selector;
+  - `src/format.js`: money maths, flow labels and error sentences, in BigInt, with tests;
+  - `src/dom.js`, `theme.js`, `toast.js`, `motion.js`: small UI helpers;
+  - `scripts/check-calls.mjs`: sends the same calls with a test key.
+- **Not built:** the LP screen (M4.3), hosting (M4.5), `settlement/` (cut), `agent-api/` (dropped, D-010).
 
 ```mermaid
 flowchart LR
-    Buyer["Buyer<br/>(scripts/buy.sh today; web/ not built)"]
+    Buyer["Buyer<br/>(web/ page with a NEAR wallet, or scripts/buy.sh)"]
     LP["LP account"]
     Escrow["escrow-&lt;tag&gt;.ikwame.testnet<br/>(contracts/escrow)"]
     Token["musdc-&lt;tag&gt;.ikwame.testnet<br/>(mock USDC, NEP-141)"]
@@ -244,7 +255,7 @@ with their PR.
   - M2.3 ticked.
 - **2026-11-04, `e64d8ac`:** PR #14 merged (all of Phase 7).
 
-### Phase 8: d2 deploy for the checkout-page demo (Nov 4–5; branch `demo/d2-checkout`, not merged)
+### Phase 8: d2 deploy for the checkout-page demo (Nov 4–10)
 - **2026-11-04, `14fd1f8`:** verifier wasm rebuilt with the new email (sha256 `ecc0515c…`).
   - Then deployed as d2 (see §2; the deploy is on-chain, not a commit).
 - **2026-11-04, `27de834`:** README note on why Paystack needs a buyer email and how a real buyer
@@ -252,11 +263,84 @@ with their PR.
   - Why: Kwame asked for the README note; the flag lets LP setup run before the secret exists.
 - **2026-11-05, `c08e6fd`:** `docs/PROJECT_HISTORY.md` created, and the "Project history (required)"
   rule added to CLAUDE.md and AGENTS.md.
-- **2026-11-10, this commit:** PAID through the real Paystack checkout page on d2 recorded
+- **2026-11-10, `0142d93`:** PAID through the real Paystack checkout page on d2 recorded
   (PROGRESS Session 5, PLAN M2.3b).
   - Steps: real key stored as `paystack-d2`; fingerprint `9d2894e2…`; checkout URL stored on-chain;
     Kwame paid with test MoMo; claim → `order_released`; buyer withdrew 2 mUSDC.
   - Files: docs only.
+- **2026-11-10, `cfac207`:** PR #15 merged (all of Phase 8).
+
+### Phase 9: Web page (Nov 10–11; branch `web/buyer-page`)
+- **2026-11-10, `ac69961`:** buyer page in `web/` (M4.1 done; M4.2 built).
+  - What: live LP quote, open order, Paystack link, check payment, close unpaid order, withdraw;
+    read-only `?view=<account>` mode; light and dark.
+  - Why: until now buyers could only use `scripts/buy.sh`; the demo needs a page.
+  - Checked: loads against escrow-d2 in a browser; every call it makes was sent with a throwaway
+    test key and accepted by the escrow (tx links in PROGRESS Session 5b).
+  - Files: `web/*`, `docs/screenshots/buyer-page.png`, README, DECISIONS (D-024), PLAN, PROGRESS.
+- **2026-11-10, `eb0674b`:** fix: the page stayed blank under `npm run dev`.
+  - Why: `@near-js/accounts` reads `process.env` when it loads; the production build replaces it,
+    the dev server does not (`ReferenceError: process is not defined`). Kwame hit it on his first run;
+    my earlier checks had only used the production build.
+  - Fix: `web/src/buffer-shim.js` also provides an empty `process.env`. Checked both
+    `npm run dev` and the built page in a browser.
+- **2026-11-11, `0fcfee0`:** buyer page redesigned as a guided fintech flow (D-025). Made with Cursor.
+  - What: four-step tracker, live USDC/GHS amount, Paystack countdown from `t_pay_ns`, enclave
+    verify state, separate success / expired / failed / slashed cards, toasts, orders list, light
+    and dark. The seller account is refused before the wallet opens.
+  - Why: the first page worked but looked unfinished, and Meteor was showing a raw contract panic
+    when `ikwame.testnet` tried to buy from itself.
+  - Unchanged: `web/src/calls.js` and `web/src/near.js` (same calls, deposits, gas, RPC, wallet setup).
+  - Checked: `npm test` (10) and `npm run build`. Bundle grew about 20 KB. Screenshots in
+    `docs/screenshots/buyer-redesign/`.
+  - Still open: the happy path needs a buyer account that is not the seller (M4.2).
+- **2026-11-11, `d332367`:** five fixes from reviewing the redesign (authored as Kwame at his request).
+  - Expired orders are neutral grey, not error red (pill and card); the expired card's tracker
+    shows where the order stopped with no step marked current, and its text says whether the
+    seller's USDC is already unlocked.
+  - The header stays on one row (it wrapped under the logo, even on desktop).
+  - A cancelled or failed "open order" stays on the amount screen; before, the page jumped to the
+    newest old order.
+  - Each order's explorer link points at that order's own last transaction from this browser
+    (kept per contract in local storage); before, every card linked the last transaction sent.
+  - The orders list follows the clock: "time ago" updates, and an unpaid order reads Expired once
+    its pay window and grace have passed, without waiting for other data to change.
+  - Files: `web/src/main.js`, `format.js` (+ test), `style.css`, `dom.js`, after-screenshots.
+  - Checked: `npm test` (10), build, browser run with no console errors. Not changed: `calls.js`, `near.js`.
+- **2026-11-11, OutLayer testnet outage (no commit).** From about 21:50 GMT OutLayer accepted
+  requests but its worker never ran them ("Execution promise failed … Refunded" after ~2 min);
+  Kwame confirmed other projects failed too. firmstreet.testnet's order 4 got two "couldn't
+  verify" failures (21:55, 21:57) and is left alone. A probe (hello-world run, no order touched)
+  checks OutLayer every 30 min until midnight GMT and again from 07:00.
+- **2026-11-11, `9b2eb39`:** the page says "Checking with the secure enclave… this can take up to
+  2 minutes" while OutLayer works, explains an empty answer ("The verification service didn't
+  answer. Your money is safe. Try again in a few minutes."), and asks for 1 testnet NEAR (0.5 was
+  too little: a 300 TGas call needs ~0.31 NEAR free). Files: `web/src/main.js`, `format.js` (+ test).
+- **2026-11-11, `ac619f3`:** read-only seller page (`?seller`), M4.3 (D-026). Files: `web/src/seller.js`,
+  `main.js`, `format.js` (+ test), `style.css`, `docs/screenshots/seller-page.png`.
+- **2026-11-11, `0adf503`:** README rewritten for judges (how it works, testnet proof, how to try,
+  honest limits, upgrade-key plan); `wasm/README.md` hash fixed to `ecc0515c…`.
+- **2026-11-11, `e2b3a2c`:** `web/vercel.json` and `docs/DEPLOY_WEB.md` (not deployed).
+- **2026-11-11, `1429c06`:** `docs/DEMO_SCRIPT.md`, live plan and a no-OutLayer fallback.
+- **2026-11-11, `bc6d0c8`:** PROGRESS, PROJECT_HISTORY and DECISIONS (D-026) for the above.
+- **2026-11-11, `a2f6033`:** commit IDs above updated after re-authoring the six commits as Kwame (his request; content unchanged).
+- **2026-11-11, `36ae36e`:** M1.9 immutability tests (`contracts/escrow/src/immutability_tests.rs`): the public
+  method list is pinned and has no settings setter; no code writes token / OutLayer / verifier /
+  params / deploy tag after `new`; the settings are identical after every kind of flow.
+  Mutation-checked (a planted nested write and a planted `self.token =` both fail the tests).
+  Also README: the disclosures the hackathon rules require (work built in the window, libraries,
+  AI-generated code including commits re-authored as Kwame) and Rust/Node prerequisites.
+- **2026-11-11, `3c34213`:** GitHub Actions workflow `.github/workflows/tests.yml` (contracts, verifier, web).
+  Not yet seen running: it needs a push.
+- **2026-11-11, `1dc45a8`:** PROGRESS / PROJECT_HISTORY for the above.
+- **2026-11-12, `4af06bc`:** README states this is Kwame's only hackathon submission. Pushed with the
+  three commits above, as Claude (Kwame's choice: no more re-authoring).
+- **2026-11-12, CI run #1 green** on `4af06bc`: contracts 267 + 5, verifier 20, web 12 + build
+  (https://github.com/Ikwame91/near-momo-p2p/actions/runs/43277945976).
+- **2026-11-12, `c9d3317`:** README drops "No CI" and shows the CI badge (CI green again).
+- **2026-11-12, M4.2 done (no code change).** Kwame bought 1 USDC through the web page with Meteor as
+  firmstreet.testnet: d2 order 6, real Paystack checkout, paid, RELEASED, withdrawn (PROGRESS Nov 12).
+- **2026-11-12, this commit:** PLAN / PROGRESS / PROJECT_HISTORY / README record it.
 
 ---
 
@@ -289,6 +373,9 @@ Short form. Full context in `docs/DECISIONS.md`.
 | D-021 | Verdict path only credits a claimable balance; 15-min VERIFY_TIMEOUT | Payout inside the callback ran out of gas and froze orders | Higher callback gas; RELEASE_PENDING state |
 | D-022 | PENDING after `pay_deadline + t_grace` is NOT_PAID; fair slash-window measurement | Stops a "pending forever" attack on LPs | Cap PENDING only in the verifier |
 | D-023 | `sha2` for `key_fp` in the verifier | Don't hand-write SHA-256 | Hand-written SHA-256 |
+| D-024 | Web page in plain JS + Vite + NEAR Wallet Selector (Meteor, Intear); no MyNearWallet; calls kept in one file and checked with a test key | One page doesn't need a framework; MyNearWallet closed app connections on Nov 1 | React starter; redirect-wallet flow; key in the browser |
+| D-025 | Buyer page redesign stays in the UI layer: CSS motion, no new packages | Keep the same contract calls and stay inside a ~100 KB bundle budget | `motion` npm package; editing `calls.js` or the wallet setup |
+| D-026 | Read-only seller page; delete the escrow's full-access key on the final deploy; no checks during an OutLayer outage | No new calls for the LP page; "nobody can change the rules" must hold; a failed check counts toward a slash | LP actions in the page; keep the key and state the trust |
 
 **Choices made in commits but not (yet) in DECISIONS.md**
 - **Escrow deploy + `new` in one transaction signed by the escrow account** (`8262b81`). From
@@ -309,9 +396,14 @@ Short form. Full context in `docs/DECISIONS.md`.
 **Open work for the current schedule**
 - The payment step can't be automated: Paystack's checkout page sits behind a Cloudflare bot check,
   so a person has to pay (fine for the demo, but it means no automated end-to-end test).
-- `demo/d2-checkout` (`14fd1f8`, `27de834`) is not merged into `main`.
-- Web page (M4.1–M4.3) and README draft (M5.1) are not started. There is no `web/` folder; buyers
-  use `scripts/buy.sh`.
+- **M4.2 done (Nov 12):** a person bought USDC through the page with Meteor (d2 order 6).
+- The web page shows one seller only (`VITE_DEFAULT_LP`): the escrow has no "list LPs" view.
+- **Depends on OutLayer testnet uptime.** It was down Nov 11 ~21:50–23:00 GMT; the page explains an empty answer, and the demo script has a fallback.
+- Hosting (M4.5) is prepared (`web/vercel.json`, `docs/DEPLOY_WEB.md`) but not deployed; `web/` is
+  on branch `web/buyer-page`, not merged.
+- `ikwame.testnet` is down to about 0.17 NEAR; it needs a faucet top-up before another deploy.
+  Test accounts were funded from `escrow-d1` (superseded deploy) and `buyer-d2`.
+- `npm install` in `web/` reports audit warnings from the wallet libraries' dependencies; not reviewed.
 - Test-day tasks still open: M1.8 near-workspaces sandbox tests (including the gas of the
   slash-in-verdict path), M1.9 immutability tests, M5.2 fresh-clone run, M2.5 hostile review.
 
@@ -321,9 +413,11 @@ Short form. Full context in `docs/DECISIONS.md`.
     build too (M2.6).
   - Nobody else can yet rebuild them to the same hash.
 - **Escrow full-access keys are not removed** after deploy (M2.7). The testnet escrows are
-  upgradeable by whoever holds the key; the "no owner" claim holds only once the key is deleted
-  or the upgrade trust is documented.
-- **No CI** (M2.9 cut). Merges rely on local `cargo test` and clippy runs; GitHub shows no checks.
+  upgradeable by whoever holds the key. The README says so; the plan is to delete the key on the
+  final deploy (D-026).
+- **CI runs tests only.** `.github/workflows/tests.yml` runs contracts, verifier and web tests and the
+  web build on every push (first green run: https://github.com/Ikwame91/near-momo-p2p/actions/runs/43277945976).
+  It does not run clippy or reproducible builds.
 - **Provider plug-in is only partly there.** D-002 and AGENTS.md describe a `PaymentProvider`
   interface, but the verifier is Paystack-only with no such trait in the code.
 - **Real-buyer email** (per-order alias) is design only.
@@ -353,5 +447,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-10. Covers all commits up to and including `c08e6fd` (branch `demo/d2-checkout`), plus the
-commit that records the Nov 10 checkout-page PAID run.
+2026-11-12. Covers all commits up to and including `c9d3317` (branch `web/buyer-page`), plus the
+commit that records the web-page purchase (M4.2).
