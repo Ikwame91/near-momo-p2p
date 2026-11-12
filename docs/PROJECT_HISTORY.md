@@ -332,7 +332,12 @@ with their PR.
   AI-generated code including commits re-authored as Kwame) and Rust/Node prerequisites.
 - **2026-11-11, `3c34213`:** GitHub Actions workflow `.github/workflows/tests.yml` (contracts, verifier, web).
   Not yet seen running: it needs a push.
-- **2026-11-11, this commit:** PROGRESS / PROJECT_HISTORY for the above.
+- **2026-11-11, `1dc45a8`:** PROGRESS / PROJECT_HISTORY for the above.
+- **2026-11-12, `4af06bc`:** README states this is Kwame's only hackathon submission. Pushed with the
+  three commits above, as Claude (Kwame's choice: no more re-authoring).
+- **2026-11-12, CI run #1 green** on `4af06bc`: contracts 267 + 5, verifier 20, web 12 + build
+  (https://github.com/Ikwame91/near-momo-p2p/actions/runs/43277945976).
+- **2026-11-12, this commit:** README drops "No CI" and shows the CI badge.
 
 ---
 
@@ -412,8 +417,9 @@ Short form. Full context in `docs/DECISIONS.md`.
 - **Escrow full-access keys are not removed** after deploy (M2.7). The testnet escrows are
   upgradeable by whoever holds the key. The README says so; the plan is to delete the key on the
   final deploy (D-026).
-- **CI added but not yet seen green.** `.github/workflows/tests.yml` runs on push; until a run passes,
-  merges rely on local `cargo test` and clippy. The README keeps "No CI" until then.
+- **CI runs tests only.** `.github/workflows/tests.yml` runs contracts, verifier and web tests and the
+  web build on every push (first green run: https://github.com/Ikwame91/near-momo-p2p/actions/runs/43277945976).
+  It does not run clippy or reproducible builds.
 - **Provider plug-in is only partly there.** D-002 and AGENTS.md describe a `PaymentProvider`
   interface, but the verifier is Paystack-only with no such trait in the code.
 - **Real-buyer email** (per-order alias) is design only.
@@ -443,5 +449,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-11. Covers all commits up to and including `3c34213` (branch `web/buyer-page`), plus the
-commit that records them.
+2026-11-12. Covers all commits up to and including `4af06bc` (branch `web/buyer-page`), plus the
+commit that replaces "No CI" with the CI badge.

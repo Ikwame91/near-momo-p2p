@@ -1,5 +1,7 @@
 # OpenRamp
 
+[![tests](https://github.com/Ikwame91/near-momo-p2p/actions/workflows/tests.yml/badge.svg)](https://github.com/Ikwame91/near-momo-p2p/actions/workflows/tests.yml)
+
 **Buy USDC with mobile money, without trusting the seller.** A NEAR escrow contract holds the
 seller's USDC and releases it only when a program running in a secure enclave (an OutLayer TEE)
 has asked the payment provider directly: "did this buyer pay this order?" If the seller's side
@@ -87,7 +89,8 @@ checkout** → pay on Paystack's page with Mobile Money, MTN, test number **0551
 - `?view=<account>` shows any account's orders read-only; `?seller` shows the seller's bond,
   liquidity, open orders and key fingerprint.
 - Tests: `cd contracts && cargo test` (267 + 5), `cd verifier && cargo test` (20),
-  `cd web && npm test` (12). Rust is pinned by `rust-toolchain.toml` (1.97.0).
+  `cd web && npm test` (12). GitHub Actions runs all three, plus the web build, on every push
+  ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)). Rust is pinned by `rust-toolchain.toml` (1.97.0).
 - Scripts for your own deploy: `scripts/deploy-testnet.sh`, `scripts/lp-setup.sh`, `scripts/buy.sh`.
 
 ## Honest limits
@@ -106,7 +109,6 @@ checkout** → pay on Paystack's page with Mobile Money, MTN, test number **0551
 - **One seller per page.** The contract has no "list sellers" view; the page shows this deploy's LP.
 - **Paystack's checkout is behind a bot check**, so the payment step can't be automated; the
   end-to-end PAID run above was done by a person.
-- **No CI.** Tests run locally before each merge; nothing runs on GitHub yet.
 - **Builds are not yet reproducible.** The deployed contract and verifier come from local builds
   (a Docker Hub rate limit blocked the reproducible build). The verifier wasm is in `wasm/` and
   its sha256 is fixed in the contract.
