@@ -118,6 +118,8 @@ checkout** → pay on Paystack's page with Mobile Money, MTN, test number **0551
 Everything in this repository was written during the build window: the first commit is
 `ee31eb5` on 2026-11-01 14:52 UTC. There is no pre-hackathon baseline.
 
+**Other submissions:** none. This is Kwame's only submission to this hackathon.
+
 **NEAR integration built in the window** (this is what is judged):
 - `contracts/escrow`: the escrow contract on NEAR testnet. It handles buy orders, seller bonds
   and liquidity in a NEP-141 token, timeouts, slashing, claimable payouts and NEP-297 events.
