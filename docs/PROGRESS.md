@@ -9,6 +9,18 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-12 18:35 UTC — M4.2 done: a person bought USDC through the web page
+Done:
+- Kwame, in his own browser with Meteor as `firmstreet.testnet` (not the seller), on escrow-d2:
+  order 6 (1 USDC = GHS 15.00, ref opr-ad88e13b-6) opened 18:27:07 → enclave created the Paystack
+  checkout (https://checkout.paystack.com/tcxl4gla934xobo) → paid with test MoMo → check claimed
+  18:28:09, attempt 1, 0 failures → RELEASED → withdrawn: firmstreet.testnet holds 1 mUSDC,
+  claimable 0. Read back with `get_order 6`, `get_claimable`, `ft_balance_of`.
+- Order 4 (from the outage) is EXPIRED, no failures recorded against the seller's bond.
+- CI green on `web/buyer-page` (runs 43277945976 and 43278321450).
+Failed / blocked: none. (Explorer API returns no tx lists, so this entry cites on-chain state.)
+Next: merge web/buyer-page into main; Vercel (Kwame clicks); video (Plan A); X post; submit.
+
 ## 2026-11-11 23:30 UTC — OutLayer back; immutability tests, README disclosures, fresh-clone check, CI
 Done:
 - OutLayer testnet answered again at 23:00 GMT (probe "Hello, webtest-d2.ikwame.testnet!"; a second

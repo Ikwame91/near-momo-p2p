@@ -172,11 +172,13 @@ Labels: **[must]** needed for the demo; **[nice]** only if time allows (D-017 sc
       `T_outage_max`, honest LP protected (D-012). Trigger for the outage case: sell flow → pawaPay
       sandbox number 233593456129 returns IN_RECONCILIATION (observed in Test B2); buy flow → TBD
       (likely the labelled simulated provider returning `server_error`). Check: recorded run.
-- [ ] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
+- [x] M4.2 Buyer screen: open order, pay via Paystack test checkout, claim, see status. Check: manual run, screenshots.
       (Nov 10: built; every call the page makes was sent to escrow-d2 with a test key via
       `web/scripts/check-calls.mjs`. Nov 11: page redesigned, screenshots in
       `docs/screenshots/buyer-redesign/`. STILL OPEN: Kwame's manual run with a wallet that is
       not the seller. `ikwame.testnet` cannot buy from itself.)
+      (Nov 12: DONE. Kwame bought 1 USDC through the page with Meteor as firmstreet.testnet:
+      d2 order 6 opened 18:27:07, real Paystack checkout, paid, checked 18:28:09 → RELEASED, withdrawn.)
 - [x] M4.3 LP screen: register, bond, liquidity, rate, open orders. Check: manual run.
       (Nov 11: read-only seller page at `?seller` / `?seller=<account>`: bond, liquidity, locked,
       open orders, can-sell-now, quote, key fingerprint status, the LP's orders. Registering and

@@ -337,7 +337,10 @@ with their PR.
   three commits above, as Claude (Kwame's choice: no more re-authoring).
 - **2026-11-12, CI run #1 green** on `4af06bc`: contracts 267 + 5, verifier 20, web 12 + build
   (https://github.com/Ikwame91/near-momo-p2p/actions/runs/43277945976).
-- **2026-11-12, this commit:** README drops "No CI" and shows the CI badge.
+- **2026-11-12, `c9d3317`:** README drops "No CI" and shows the CI badge (CI green again).
+- **2026-11-12, M4.2 done (no code change).** Kwame bought 1 USDC through the web page with Meteor as
+  firmstreet.testnet: d2 order 6, real Paystack checkout, paid, RELEASED, withdrawn (PROGRESS Nov 12).
+- **2026-11-12, this commit:** PLAN / PROGRESS / PROJECT_HISTORY / README record it.
 
 ---
 
@@ -393,14 +396,9 @@ Short form. Full context in `docs/DECISIONS.md`.
 **Open work for the current schedule**
 - The payment step can't be automated: Paystack's checkout page sits behind a Cloudflare bot check,
   so a person has to pay (fine for the demo, but it means no automated end-to-end test).
-- **The buyer happy path on the web page is still open (M4.2).** On Nov 10 Kwame signed in with
-  Meteor as `ikwame.testnet` and the contract rejected the order: an LP cannot buy from itself.
-  Meteor showed that panic as raw JSON. The page now blocks that account before the wallet opens.
-  A different testnet account, with a little NEAR, still has to open, pay, check and withdraw.
+- **M4.2 done (Nov 12):** a person bought USDC through the page with Meteor (d2 order 6).
 - The web page shows one seller only (`VITE_DEFAULT_LP`): the escrow has no "list LPs" view.
-- **OutLayer testnet is down (since ~21:50 GMT Nov 11).** Nothing that needs it can be shown live
-  until it returns; the demo script has a fallback. Order 4 (firmstreet) is UNVERIFIED with 2
-  failures; nobody should call `claim` on it until OutLayer works.
+- **Depends on OutLayer testnet uptime.** It was down Nov 11 ~21:50–23:00 GMT; the page explains an empty answer, and the demo script has a fallback.
 - Hosting (M4.5) is prepared (`web/vercel.json`, `docs/DEPLOY_WEB.md`) but not deployed; `web/` is
   on branch `web/buyer-page`, not merged.
 - `ikwame.testnet` is down to about 0.17 NEAR; it needs a faucet top-up before another deploy.
@@ -449,5 +447,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-12. Covers all commits up to and including `4af06bc` (branch `web/buyer-page`), plus the
-commit that replaces "No CI" with the CI badge.
+2026-11-12. Covers all commits up to and including `c9d3317` (branch `web/buyer-page`), plus the
+commit that records the web-page purchase (M4.2).

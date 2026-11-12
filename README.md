@@ -62,6 +62,11 @@ deploy and `new` in one transaction [87GcoZAa…](https://testnet.nearblocks.io/
 | Buyer paid on Paystack's page (test MoMo); check → `order_released` | [5dKzaxnq…](https://testnet.nearblocks.io/txns/5dKzaxnqqLjpCJTSfGvaUWybRa8SbT4aZLZyfCWq6aB6) |
 | Buyer withdraws 2 USDC | [3TcS1rFm…](https://testnet.nearblocks.io/txns/3TcS1rFmn6ZEgDYVkFKGfJVPd1RRCjygaEmmPadu3t3V) |
 
+**Bought through the web page by a person (d2, order 6, Nov 12):** Kwame connected Meteor as
+`firmstreet.testnet`, bought 1 USDC for GHS 15.00, paid on the Paystack checkout the enclave
+created, checked the payment, and withdrew. The order now reads `RELEASED` (see it read-only on
+the page with `?view=firmstreet.testnet`, or call `get_order` with `{"order_id": 6}` on the escrow).
+
 **NOT_PAID and slash (earlier deploy d1, Nov 4):**
 
 | Outcome | Transactions |
