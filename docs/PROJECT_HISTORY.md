@@ -352,10 +352,14 @@ with their PR.
   (`actionButton` in `web/src/main.js`), one toast at a time (`web/src/toast.js`), the wallet modal follows the
   page's dark theme (`web/src/near.js`), description and Open Graph tags (`web/index.html`), and the README
   opening no longer says "no owner, no admin" while escrow-d2 keeps its full-access key.
-- **2026-11-13, this commit:** web redesign, "wax print" (D-027, `docs/DESIGN.md`). Three directions were
+- **2026-11-13, `1bfb75a`:** web redesign, "wax print" (D-027, `docs/DESIGN.md`). Three directions were
   rendered with the App Designer process; Kwame picked the wax print with the sealed headline. Cobalt colour
   field, tomato primary action, Bricolage Grotesque, a stamped adinkra band (`web/src/band.js`) instead of the
   step tracker, "per USDC" and "the seller (ikwame.testnet)" wording, numbered "How it works". UI layer only.
+- **2026-11-13, this commit:** redesign polish from Grok's review: one lighter panel for the current step, order
+  lists show the newest 3 with "See all", the read-only notice is a small pill, "Close order" only when it can be
+  used, the seller page leads with the guarantee and the amount available, the received amount counts up with a
+  stamped tick and a "View transaction" button, and "How it works" step 1 no longer says "no admin functions".
 
 ---
 

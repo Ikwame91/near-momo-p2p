@@ -3,6 +3,7 @@
 :root {
   color-scheme: dark;
   --bg: #2340b0;
+  --panel: #2d4cc6;
   --card: #18308a;
   --ink: #ffffff;
   --ink-2: #d3dcff;
@@ -35,6 +36,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
   --bg: #0e1a47;
+  --panel: #1d3078;
   --card: #172763;
   --ink: #f2f5ff;
   --ink-2: #afbbea;
@@ -57,6 +59,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #0e1a47;
+  --panel: #1d3078;
   --card: #172763;
   --ink: #f2f5ff;
   --ink-2: #afbbea;
@@ -137,12 +140,21 @@ section:empty { display: none; }
 
 /* Content sits on the colour field; no boxes around whole screens. */
 .card { background: transparent; border: 0; box-shadow: none; padding: 0; }
+/* The one raised surface: the screen's main step, a lighter cobalt panel. */
+#flow > .card, .seller-card { background: var(--panel); border-radius: 28px; padding: 20px; box-shadow: var(--shadow); }
+.viewing { margin: 0 0 var(--s2); }
+.see-all { margin-top: var(--s1); min-height: 44px; padding: 0; border: 0; background: none; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.success .tick { animation: stamp 360ms cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+.outcome a.secondary { margin-top: var(--s2); }
+.trust { display: grid; gap: var(--s2); margin: var(--s2) 0 var(--s3); }
+.trust-value { font-size: 2.5rem; line-height: 1; font-weight: 800; letter-spacing: -0.04em; }
+.trust-label { margin-top: 4px; color: var(--ink-2); font-size: 0.95rem; }
 
 .band { margin: 4px 0 var(--s4); }
 .band .marks { display: flex; justify-content: space-between; align-items: center; }
-.band svg { width: 56px; height: 56px; color: var(--line); fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.band svg { width: 56px; height: 56px; color: var(--ink); opacity: 0.3; fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
 .band svg .fill { fill: currentColor; stroke: none; }
-.band svg.on { color: var(--ink); }
+.band svg.on { opacity: 1; }
 .band svg.stamp { animation: stamp 320ms cubic-bezier(0.3, 1.4, 0.5, 1) both; }
 .band-label { margin: 10px 0 0; font-size: 0.85rem; color: var(--ink-2); font-weight: 500; text-align: left; }
 .rise { animation: rise 250ms var(--ease) both; }

@@ -20,10 +20,11 @@ colours, MTN yellow, Inter, cards inside cards, an icon-tile "How it works" grid
 | Role | Light (cobalt) | Dark (night) |
 |---|---|---|
 | ground `--bg` | `#2340b0` | `#0e1a47` |
+| panel `--panel`: the one raised surface, around the screen's main step | `#2d4cc6` | `#1d3078` |
 | raised `--card` (chips, inputs, toasts, pills) | `#18308a` | `#172763` |
 | ink `--ink` | `#ffffff` | `#f2f5ff` |
 | ink-2 `--ink-2` / `--muted` | `#d3dcff` | `#afbbea` |
-| rule `--line` (also unstamped symbols) | `#4762c9` | `#2b3c7d` |
+| rule `--line` | `#4762c9` | `#2b3c7d` |
 | accent `--brand`: the primary action only | `#ff5b3a` | `#ff6e50` |
 | on-accent `--brand-ink` (dark text: white on tomato fails contrast) | `#1c0904` | `#1c0904` |
 | status: pending / ok / bad | `#ffd27a` / `#a6f0c8` / `#ffbcae` | `#f7c766` / `#8fe3b7` / `#ffaa9a` |
@@ -32,7 +33,9 @@ Type: Bricolage Grotesque (OFL, Google Fonts), one family. Display moments: the 
 96px/800 with -5% tracking, the received amount at 72px, screen titles 32px/800, the lede 28px/500
 with one 800 word. Body 16 to 19px, metadata 13 to 15px.
 
-Layout: no boxes around screens; content sits on the ground. Order lists use hairline rules.
+Layout: one lighter panel holds the current step; everything else sits on the ground. Unstamped
+symbols are white at 30%. Order lists show the newest 3 with "See all"; the seller page leads with
+the guarantee and the amount available. Order lists use hairline rules.
 Buttons are pills; the tomato one is the single primary action per screen. Margin 16px.
 
 ## Signature

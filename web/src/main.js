@@ -47,6 +47,7 @@ const state = {
   focusId: null,
   compose: false,
   menu: false,
+  allOrders: false, // the order list shows the newest 3 until "See all"
   celebrated: new Set(),
 };
 let amountText = "2";
@@ -236,6 +237,14 @@ function claimableBar() {
   );
 }
 
+/** The released amount, counting up from 0 when the card appears (motion.js; instant with reduced motion). */
+function countUp(units) {
+  const el = h("p", { class: "big num" });
+  const target = BigInt(units);
+  countTo(el, 0n, target, (n) => `${n === target ? fmtUsdc(n) : (Number(n) / 1e6).toFixed(2)} USDC`);
+  return el;
+}
+
 function ring(order) {
   const windowNs = state.config.params.t_pay_ns;
   const wrap = h("div", { class: "ring-wrap", "data-deadline": String(order.pay_deadline), "data-window": String(windowNs) });
@@ -385,8 +394,8 @@ function outcome(order, kind) {
   const amount = `${fmtUsdc(order.usdc_amount)} USDC`;
   const tx = orderTx(order);
   const explorer = tx
-    ? h("a", { href: EXPLORER_TX + tx, target: "_blank", rel: "noopener" }, "View the transaction")
-    : h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, "View the contract on the explorer");
+    ? h("a", { class: "secondary", href: EXPLORER_TX + tx, target: "_blank", rel: "noopener" }, "View transaction")
+    : h("a", { class: "secondary", href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, "View on the explorer");
   let title, body, extra = null;
   if (kind === "success") {
     title = "USDC received";
@@ -400,10 +409,9 @@ function outcome(order, kind) {
       ? "No payment was confirmed in time. You weren't charged, and the seller's USDC has been unlocked."
       : "No payment was confirmed in time. You aren't charged. Closing the order unlocks the seller's USDC.";
     if (nextStep(order, nowNs(), BigInt(state.config.params.t_grace_ns)) === "expire") {
-      extra = h("button", {
-        class: "secondary", disabled: state.busy || !state.account,
-        onclick: () => act("Close order", [escrow.expireOrder(order.id)], { orderId: order.id }),
-      }, "Close order");
+      extra = state.account
+        ? actionButton("Close order", "Close order", () => act("Close order", [escrow.expireOrder(order.id)], { orderId: order.id }), "secondary")
+        : h("p", { class: "muted" }, `Connect ${order.buyer} to close it.`);
     }
   } else {
     title = "This order didn't complete";
@@ -415,7 +423,7 @@ function outcome(order, kind) {
     finished ? null : h("div", { class: "end-icon", "aria-hidden": "true" }, icon("clock")),
     kind === "success" || kind === "slashed" ? h("div", { class: "tick", "aria-hidden": "true" }, icon("check")) : null,
     h("h1", {}, title),
-    h("p", { class: "big num" }, kind === "success" || kind === "slashed" ? amount : ""),
+    finished ? countUp(order.usdc_amount) : null,
     h("p", {}, body),
     kind === "success" && state.claimable > 0n
       ? actionButton("Withdraw", "Withdraw to my wallet", withdraw)
@@ -424,7 +432,7 @@ function outcome(order, kind) {
       ? actionButton("Withdraw", "Withdraw to my wallet", withdraw)
       : null,
     extra,
-    h("p", {}, explorer),
+    explorer,
     h("button", { class: "secondary", onclick: () => { state.compose = true; state.focusId = null; flowKey = null; render(); } }, "Buy more"),
   );
   return card;
@@ -451,7 +459,7 @@ function renderFlow() {
   if (screen.screen === "amount" && key === flowKey) return;
   flowKey = key;
   const readOnly = VIEW_AS && !state.account
-    ? h("p", { class: "muted" }, `Read-only view of ${VIEW_AS}. Connect that wallet to act.`)
+    ? h("p", { class: "viewing" }, h("span", { class: "pill neutral" }, `Viewing ${VIEW_AS} · read-only`))
     : null;
   let body;
   if (!order || screen.screen === "amount") body = renderAmount();
@@ -470,11 +478,12 @@ function renderOrders() {
   const pills = new Map(state.orders.map((o) => [o.id, statusPill(o, now, grace)]));
   // The key holds what is shown, including "time ago" and the pill, so the 1 s timer below
   // rebuilds the list only when one of those has actually changed.
-  const key = JSON.stringify([who(), state.orders.map((o) => [o.id, o.state, o.usdc_amount, pills.get(o.id).label, timeAgo(o.opened_at, now), orderTx(o)])]);
+  const key = JSON.stringify([who(), state.allOrders, state.orders.map((o) => [o.id, o.state, o.usdc_amount, pills.get(o.id).label, timeAgo(o.opened_at, now), orderTx(o)])]);
   if (key === ordersKey) return;
   ordersKey = key;
+  const shown = state.allOrders ? state.orders : state.orders.slice(0, 3);
   const rows = state.orders.length
-    ? state.orders.map((o) => {
+    ? shown.map((o) => {
         const pill = pills.get(o.id);
         return h("div", { class: "order-row" },
           h("button", {
@@ -495,6 +504,10 @@ function renderOrders() {
   root.replaceChildren(
     h("h2", { id: "orders-h" }, state.account ? "My orders" : `Orders of ${VIEW_AS}`),
     h("div", { class: "orders" }, rows),
+    state.orders.length > 3
+      ? h("button", { class: "see-all", "aria-expanded": state.allOrders ? "true" : "false", onclick: () => { state.allOrders = !state.allOrders; renderOrders(); } },
+          state.allOrders ? "Show fewer" : `See all ${state.orders.length}`)
+      : null,
   );
 }
 
@@ -505,7 +518,7 @@ function renderHow() {
   root.replaceChildren(
     h("h2", { id: "how-h" }, "How it works"),
     h("ol", { class: "how-list" },
-      item("USDC is locked", "The seller's USDC sits in a contract with no admin functions."),
+      item("USDC is locked", "The seller's USDC sits in the escrow contract. Only a Paystack check for your order releases it."),
       item("You pay MoMo", "Cedis go to the seller on Paystack. Your number stays on their page."),
       item("Checked in a secure enclave", "Paystack is asked directly. The seller's key never leaves the enclave."),
       item("USDC is released", "A match releases the USDC. If the seller can't be checked, their bond pays you."),
