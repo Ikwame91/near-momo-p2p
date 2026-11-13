@@ -356,10 +356,15 @@ with their PR.
   rendered with the App Designer process; Kwame picked the wax print with the sealed headline. Cobalt colour
   field, tomato primary action, Bricolage Grotesque, a stamped adinkra band (`web/src/band.js`) instead of the
   step tracker, "per USDC" and "the seller (ikwame.testnet)" wording, numbered "How it works". UI layer only.
-- **2026-11-13, this commit:** redesign polish from Grok's review: one lighter panel for the current step, order
+- **2026-11-13, `491e6cd` (merged as `3fdaac3`, PR #19):** redesign polish from Grok's review: one lighter panel for the current step, order
   lists show the newest 3 with "See all", the read-only notice is a small pill, "Close order" only when it can be
   used, the seller page leads with the guarantee and the amount available, the received amount counts up with a
   stamped tick and a "View transaction" button, and "How it works" step 1 no longer says "no admin functions".
+- **2026-11-13, on-chain (no commit):** orders 3, 5, 9 and 10 closed with `expire_order`; OutLayer down again from
+  about 20:10 UTC (order 11 opened, no checkout).
+- **2026-11-13, this commit:** UI review with Vercel's `web-design-guidelines` skill (D-028, `docs/UI_REVIEW.md`),
+  skill committed under `.claude/skills/`. Specific status labels, a bond-window countdown (`bondPaysAt`, mirrors
+  `due_at`), NEAR fees before confirming (`fmtNear`), Copy buttons, hover/tap/skip-link/theme-color fixes.
 
 ---
 
@@ -394,6 +399,7 @@ Short form. Full context in `docs/DECISIONS.md`.
 | D-023 | `sha2` for `key_fp` in the verifier | Don't hand-write SHA-256 | Hand-written SHA-256 |
 | D-024 | Web page in plain JS + Vite + NEAR Wallet Selector (Meteor, Intear); no MyNearWallet; calls kept in one file and checked with a test key | One page doesn't need a framework; MyNearWallet closed app connections on Nov 1 | React starter; redirect-wallet flow; key in the browser |
 | D-025 | Buyer page redesign stays in the UI layer: CSS motion, no new packages | Keep the same contract calls and stay inside a ~100 KB bundle budget | `motion` npm package; editing `calls.js` or the wallet setup |
+| D-028 | Commit Vercel's `web-design-guidelines` skill for UI reviews; no React rewrite | Page felt unfinished; web/ is plain JS | shadcn/ui + React rewrite; frontend-design |
 | D-027 | "Wax print" redesign: cobalt field, one tomato action, Bricolage Grotesque (Google Fonts), stamped adinkra progress band | The page read as a generic green fintech form | Forex rate board (dark finance cliche); sealed envelope (printed form) |
 | D-026 | Read-only seller page; delete the escrow's full-access key on the final deploy; no checks during an OutLayer outage | No new calls for the LP page; "nobody can change the rules" must hold; a failed check counts toward a slash | LP actions in the page; keep the key and state the trust |
 
@@ -471,5 +477,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-13. Covers all commits up to and including `e11b056` (`main`), plus the redesign commit on
+2026-11-13. Covers all commits up to and including `3fdaac3` (`main`), plus the UI review commit on
 `claude/practical-dijkstra-gt0v80`.

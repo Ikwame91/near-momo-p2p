@@ -9,6 +9,15 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-13 21:00 UTC — UI review with web-design-guidelines; page gaps filled (D-028)
+Done: redesign merged (PR #19) and live; orders 3, 5, 9, 10 closed (expire_order). Review against
+Vercel's Web Interface Guidelines (docs/UI_REVIEW.md): hover, tap, skip link, theme-color, input
+name. Gaps: specific status labels, a live bond-window countdown while "Not confirmed" (mirrors
+`due_at`), NEAR fees before confirming, Copy buttons for amount and reference.
+Verified: `npm test` 14 pass (3 new tests written first), build OK, no console errors, screenshots.
+Failed / blocked: OutLayer down again from about 20:10 UTC; order 11 opened, no checkout.
+Next: Kwame reviews and merges; close order 11; video, X post, submission.
+
 ## 2026-11-13 20:00 UTC — Web page redesign ("wax print", D-027)
 Done: three directions rendered (rate board, wax print, sealed envelope); Kwame picked wax print
 with the sealed headline. Built in `web/`: new tokens and type in `style.css`, `band.js` (stamped

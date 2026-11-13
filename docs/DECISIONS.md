@@ -367,3 +367,13 @@ change to `calls.js`, contract calls, deposits, gas or the flow. The font loads 
 Alternatives: self-hosting the font (more files to keep; fine later); the rate-board direction
 (the usual dark-finance look); the sealed-envelope direction (a printed form, the least lively).
 
+## D-028 Vercel's web-design-guidelines skill for UI reviews (Nov 13, 2026)
+Status: accepted
+Context: Kwame found the page unfinished and researched UI skills. `web/` is plain JavaScript
+(D-024), so shadcn/ui and react-best-practices would mean a React rewrite a day before the deadline.
+Decision: commit only `web-design-guidelines` (vercel-labs/agent-skills, commit 1a2c79d) under
+`.claude/skills/`. It is one instruction file with no scripts: it fetches Vercel's rule list and
+reviews UI files against it. Findings and what was declined are in docs/UI_REVIEW.md.
+Alternatives: frontend-design (overlaps with the D-027 direction work); a React + shadcn/ui rewrite
+(too risky now); third-party skills with scripts (would need a full read and a pinned commit).
+

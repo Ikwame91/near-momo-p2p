@@ -3,10 +3,10 @@
 import "./buffer-shim.js"; // keep first
 import { ESCROW_ID, DEFAULT_LP, EXPLORER_TX } from "./config.js";
 import { view, initWallet, showWalletModal, signOut, send } from "./near.js";
-import { calls, storageDeposit } from "./calls.js";
+import { calls, storageDeposit, OPEN_ORDER_DEPOSIT } from "./calls.js";
 import {
   ghsPesewasFor, parseUsdc, fmtUsdc, fmtGhs, nextStep, flowScreen, statusPill, timeAgo,
-  shortAccount, initial, amountIssue, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome,
+  shortAccount, initial, amountIssue, bondPaysAt, fmtNear, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome,
 } from "./format.js";
 import { h, $, icon } from "./dom.js";
 import { initTheme, currentTheme, toggleTheme } from "./theme.js";
@@ -237,6 +237,17 @@ function claimableBar() {
   );
 }
 
+/** A label, a value and (when `copy` is set) a Copy button that confirms with a toast. */
+function copyRow(label, shown, copy, name) {
+  const btn = copy == null ? null : h("button", {
+    class: "copy", "aria-label": `Copy ${name.toLowerCase()}`,
+    onclick: () => navigator.clipboard.writeText(copy)
+      .then(() => toast("ok", `${name} copied.`))
+      .catch(() => toast("error", "Couldn't copy. Select the text and copy it instead.")),
+  }, "Copy");
+  return h("div", {}, h("dt", {}, label), h("dd", {}, h("span", { class: "num", translate: "no" }, shown), btn));
+}
+
 /** The released amount, counting up from 0 when the card appears (motion.js; instant with reduced motion). */
 function countUp(units) {
   const el = h("p", { class: "big num" });
@@ -301,7 +312,7 @@ function renderAmount() {
   };
 
   const input = h("input", {
-    id: "amount", inputmode: "decimal", autocomplete: "off", "aria-describedby": "amount-error",
+    id: "amount", name: "amount", inputmode: "decimal", autocomplete: "off", spellcheck: "false", "aria-describedby": "amount-error",
     value: amountText,
     oninput: (e) => { amountText = e.target.value; update(); },
   });
@@ -329,6 +340,7 @@ function renderAmount() {
     issue,
     button,
     h("p", { class: "note muted" }, `You'll have ${payMinutes(state.config.params.t_pay_ns)} minutes to pay.`),
+    h("p", { class: "fees" }, `Testnet NEAR fees: ${fmtNear(OPEN_ORDER_DEPOSIT)} to open the order (the unused part comes back), then ${fmtNear(fee())} for the Paystack link and ${fmtNear(fee())} per payment check.`),
   );
 }
 
@@ -343,7 +355,11 @@ function renderPay(order) {
     stepper(2),
     h("h1", {}, "Pay with mobile money"),
     ring(order),
-    h("p", { class: "note" }, `Pay GH₵ ${fmtGhs(order.ghs_amount_pesewas)} for ${fmtUsdc(order.usdc_amount)} USDC.`),
+    h("dl", { class: "copyrows" },
+      copyRow("You pay", `GH₵ ${fmtGhs(order.ghs_amount_pesewas)}`, fmtGhs(order.ghs_amount_pesewas), "Amount"),
+      copyRow("You get", `${fmtUsdc(order.usdc_amount)} USDC`, null),
+      copyRow("Order reference", order.reference, order.reference, "Reference"),
+    ),
     h("p", { class: "note muted" }, `Pay with MTN MoMo / Telecel Cash on Paystack's page, then come back. You have ${minutes} minutes from when the order opened.`),
     primary,
     actionButton("Check payment", "I've paid, check payment",
@@ -358,7 +374,14 @@ function renderVerify(order) {
   let action = null;
   if (step === "recheck") {
     title = "Not confirmed yet";
-    body = `The payment couldn't be checked (${order.failures} ${order.failures === 1 ? "try" : "tries"}). Check again in a few minutes. If it can never be checked, the seller's bond pays you.`;
+    const tries = `${order.failures} ${order.failures === 1 ? "try" : "tries"}`;
+    const due = bondPaysAt(order, state.config.params);
+    body = due != null && nowNs() < due
+      ? [`The payment couldn't be checked (${tries}). Check again in a few minutes. Bond window: `,
+          h("span", { class: "num", "data-deadline": String(due), "data-window": state.config.params.t_outage_max_ns.toString() },
+            h("b", { "data-clock": "1" }, clockLeft(due, nowNs()))),
+          " left. If it still can't be checked after that, the next check pays you from the seller's bond."]
+      : `The payment couldn't be checked (${tries}). The bond window has passed: if the next check still can't verify it, the seller's bond pays you.`;
     action = actionButton("Check again", "Check again",
       () => act("Check again", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }));
   } else if (step === "check") {

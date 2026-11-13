@@ -67,9 +67,33 @@ export function flowScreen(order, nowNs, graceNs) {
 export function statusPill(order, nowNs, graceNs) {
   const { screen } = flowScreen(order, nowNs, graceNs);
   if (screen === "success") return { kind: "ok", label: "Paid" };
-  if (screen === "slashed") return { kind: "ok", label: "Slashed" };
+  if (screen === "slashed") return { kind: "ok", label: "Bond paid" };
   if (screen === "expired") return { kind: "neutral", label: "Expired" };
-  return { kind: "pending", label: "Pending" };
+  const next = nextStep(order, nowNs, graceNs);
+  const label = { checkout: "Awaiting payment", pay: "Awaiting payment", check: "Check due", wait: "Verifying",
+    recheck: "Not confirmed", finalize: "Releasing" }[next] || "Pending";
+  return { kind: "pending", label };
+}
+
+/**
+ * When the seller's bond starts paying the buyer, mirroring `due_at` in contracts/escrow/src/verdicts.rs:
+ * first failure + t_outage_max, or first seller fault + t_retry, whichever is earlier (BigInt ns).
+ * A check that still can't be verified at or after this time slashes the bond. null before any failure.
+ */
+export function bondPaysAt(order, params) {
+  if (order.first_failure_at == null) return null;
+  const outage = BigInt(order.first_failure_at) + BigInt(params.t_outage_max_ns);
+  if (order.first_lp_fault_at == null) return outage;
+  const fault = BigInt(order.first_lp_fault_at) + BigInt(params.t_retry_ns);
+  return fault < outage ? fault : outage;
+}
+
+/** yoctoNEAR (string or BigInt) as a trimmed NEAR amount: "0.01". */
+export function fmtNear(yocto) {
+  const y = BigInt(yocto);
+  const unit = 10n ** 24n;
+  const frac = (y % unit).toString().padStart(24, "0").replace(/0+$/, "");
+  return (y / unit).toString() + (frac ? "." + frac : "");
 }
 
 /** "2m ago" from two nanosecond timestamps. */
