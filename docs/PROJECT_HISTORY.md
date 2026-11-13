@@ -79,7 +79,8 @@ Testnet (needs `NEAR_ACCOUNT_ID`, `NEAR_PRIVATE_KEY`; see `.env.example`):
   - `scripts/test-a` and `scripts/test-b` hold the feasibility tests (records, not product code).
 - **Web page** (`web/`, buyer only so far):
   - `src/main.js`: the buyer flow (amount, pay, verify, outcome) and the orders list;
-  - `src/style.css`: design tokens, light and dark;
+  - `src/style.css`: design tokens, cobalt and night (docs/DESIGN.md);
+  - `src/band.js`: the stamped adinkra progress band;
   - `src/calls.js`: every contract call the page makes, as plain data (unchanged by the redesign);
   - `src/near.js`: reads over JSON-RPC, signing through the wallet selector;
   - `src/format.js`: money maths, flow labels and error sentences, in BigInt, with tests;
@@ -347,10 +348,14 @@ with their PR.
 - **2026-11-13, OutLayer outage (no commit):** OutLayer testnet failed every probe from about 07:00 to 16:04 UTC, then
   answered at 16:34. d2 order 7 was then closed with one claim (NOT_PAID, `not_found`, so EXPIRED; bond untouched).
   Kwame bought 2 USDC live through the page as d2 order 8 (RELEASED).
-- **2026-11-13, this commit:** demo polish from the video review. Only the pressed button shows the spinner
+- **2026-11-13, `4f6defa` (merged as `e11b056`, PR #18):** demo polish from the video review. Only the pressed button shows the spinner
   (`actionButton` in `web/src/main.js`), one toast at a time (`web/src/toast.js`), the wallet modal follows the
   page's dark theme (`web/src/near.js`), description and Open Graph tags (`web/index.html`), and the README
   opening no longer says "no owner, no admin" while escrow-d2 keeps its full-access key.
+- **2026-11-13, this commit:** web redesign, "wax print" (D-027, `docs/DESIGN.md`). Three directions were
+  rendered with the App Designer process; Kwame picked the wax print with the sealed headline. Cobalt colour
+  field, tomato primary action, Bricolage Grotesque, a stamped adinkra band (`web/src/band.js`) instead of the
+  step tracker, "per USDC" and "the seller (ikwame.testnet)" wording, numbered "How it works". UI layer only.
 
 ---
 
@@ -385,6 +390,7 @@ Short form. Full context in `docs/DECISIONS.md`.
 | D-023 | `sha2` for `key_fp` in the verifier | Don't hand-write SHA-256 | Hand-written SHA-256 |
 | D-024 | Web page in plain JS + Vite + NEAR Wallet Selector (Meteor, Intear); no MyNearWallet; calls kept in one file and checked with a test key | One page doesn't need a framework; MyNearWallet closed app connections on Nov 1 | React starter; redirect-wallet flow; key in the browser |
 | D-025 | Buyer page redesign stays in the UI layer: CSS motion, no new packages | Keep the same contract calls and stay inside a ~100 KB bundle budget | `motion` npm package; editing `calls.js` or the wallet setup |
+| D-027 | "Wax print" redesign: cobalt field, one tomato action, Bricolage Grotesque (Google Fonts), stamped adinkra progress band | The page read as a generic green fintech form | Forex rate board (dark finance cliche); sealed envelope (printed form) |
 | D-026 | Read-only seller page; delete the escrow's full-access key on the final deploy; no checks during an OutLayer outage | No new calls for the LP page; "nobody can change the rules" must hold; a failed check counts toward a slash | LP actions in the page; keep the key and state the trust |
 
 **Choices made in commits but not (yet) in DECISIONS.md**
@@ -461,5 +467,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-13. Covers all commits up to and including `cfa2aee` (`main`), plus the demo polish commit on
+2026-11-13. Covers all commits up to and including `e11b056` (`main`), plus the redesign commit on
 `claude/practical-dijkstra-gt0v80`.

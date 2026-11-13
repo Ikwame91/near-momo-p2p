@@ -353,3 +353,17 @@ and the wallet-selector setup. If the connected account is the seller, the page 
 order before the wallet opens.
 Alternatives: the `motion` package (would spend the bundle budget); changing call arguments to
 make the self-buy case succeed (the contract forbids it).
+
+## D-027 Web page redesign: "wax print" direction, Bricolage Grotesque web font (Nov 13, 2026)
+Status: accepted
+Context: Kwame found the page boring. Three directions were rendered on the real amount screen
+(App Designer process): a forex rate board, a wax-print cloth, a sealed envelope. Kwame chose the
+wax print with the envelope's "sealed" headline, real adinkra symbols, "per USDC" wording and a
+labelled seller.
+Decision: cobalt colour field, one tomato accent for the primary action, Bricolage Grotesque, and a
+stamped adinkra band replacing the step tracker (docs/DESIGN.md). UI layer only, as D-025: no
+change to `calls.js`, contract calls, deposits, gas or the flow. The font loads from Google Fonts
+(OFL licence); if it fails to load, the page falls back to the system sans and still works.
+Alternatives: self-hosting the font (more files to keep; fine later); the rate-board direction
+(the usual dark-finance look); the sealed-envelope direction (a printed form, the least lively).
+

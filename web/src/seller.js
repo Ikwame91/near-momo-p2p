@@ -54,7 +54,7 @@ export function sellerScreen({ data, lpId, escrowId, explorerAccount, nowNs, gra
       stat("Can sell right now", usdc(s.canServe), "Liquidity, capped so locked never exceeds the bond"),
     ),
     h("div", { class: "facts" },
-      h("div", {}, h("span", { class: "muted" }, "Price"), h("span", { class: "num" }, `1 USDC = GHS ${fmtGhs(lp.quote.rate_pesewas_per_usdc)}`)),
+      h("div", {}, h("span", { class: "muted" }, "Price"), h("span", { class: "num" }, `GH₵ ${fmtGhs(lp.quote.rate_pesewas_per_usdc)} per USDC`)),
       h("div", {}, h("span", { class: "muted" }, "Order size"), h("span", { class: "num" }, `${fmtUsdc(lp.quote.min_usdc)} – ${fmtUsdc(lp.quote.max_usdc)} USDC`)),
       h("div", {}, h("span", { class: "muted" }, "New-buyer exposure"), h("span", { class: "num" }, `${fmtUsdc(lp.new_buyer_open)} of ${fmtUsdc(lp.quote.new_buyer_exposure_max)} USDC`)),
       h("div", {}, h("span", { class: "muted" }, "Paystack key"),
