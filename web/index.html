@@ -25,12 +25,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" />
-    <meta name="theme-color" content="#2340b0" />
+    <meta name="theme-color" content="#2340b0" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0e1a47" media="(prefers-color-scheme: dark)" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <a class="skip" href="#flow">Skip to buying USDC</a>
     <header class="top">
-      <div class="brand"><span class="mark" id="mark"></span><span>OpenRamp</span></div>
+      <div class="brand" translate="no"><span class="mark" id="mark"></span><span>OpenRamp</span></div>
       <span class="pill pending testnet">Testnet · test money only</span>
       <span class="spacer"></span>
       <div class="top-actions" id="top-actions"></div>

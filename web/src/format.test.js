@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ghsPesewasFor, fmtUsdc, fmtGhs, parseUsdc, nextStep,
-  flowScreen, statusPill, timeAgo, shortAccount, amountIssue, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome, sellerSummary,
+  flowScreen, statusPill, bondPaysAt, fmtNear, timeAgo, shortAccount, amountIssue, humanError, payMinutes, clockLeft, ringFraction, enclaveOutcome, sellerSummary,
 } from "./format.js";
 
 test("GHS cost matches the contract: ceil(usdc × rate / 1e6)", () => {
@@ -59,18 +59,37 @@ test("guided screen and stepper step", () => {
   assert.deepEqual(flowScreen(o({ state: "EXPIRED" }), now, grace), { screen: "expired", step: 2 });
 });
 
-test("status pills (expired is neutral, never error red)", () => {
+test("status pills say what is happening (expired is neutral, never error red)", () => {
   const now = 1_000n, grace = 10n;
   const o = (x) => ({ state: "AWAITING_PAYMENT", checkout_url: null, pay_deadline: "2000", claim_until: null, ...x });
   assert.deepEqual(statusPill(o({ state: "RELEASED" }), now, grace), { kind: "ok", label: "Paid" });
-  assert.deepEqual(statusPill(o({}), now, grace), { kind: "pending", label: "Pending" });
-  assert.deepEqual(statusPill(o({ state: "VERIFYING" }), now, grace), { kind: "pending", label: "Pending" });
+  assert.deepEqual(statusPill(o({}), now, grace), { kind: "pending", label: "Awaiting payment" });
+  assert.deepEqual(statusPill(o({ state: "VERIFYING" }), now, grace), { kind: "pending", label: "Verifying" });
+  assert.deepEqual(statusPill(o({ state: "UNVERIFIED" }), now, grace), { kind: "pending", label: "Not confirmed" });
+  assert.deepEqual(statusPill(o({ state: "RELEASE_PENDING" }), now, grace), { kind: "pending", label: "Releasing" });
   assert.deepEqual(statusPill(o({ state: "EXPIRED" }), now, grace), { kind: "neutral", label: "Expired" });
-  assert.deepEqual(statusPill(o({ state: "SLASHED" }), now, grace), { kind: "ok", label: "Slashed" });
+  assert.deepEqual(statusPill(o({ state: "SLASHED" }), now, grace), { kind: "ok", label: "Bond paid" });
   // still AWAITING_PAYMENT on-chain but past pay_deadline + grace: nothing left to do but expire
   assert.deepEqual(statusPill(o({ pay_deadline: "900" }), now, grace), { kind: "neutral", label: "Expired" });
-  // past the deadline but inside grace: can still be checked, so still pending
-  assert.deepEqual(statusPill(o({ pay_deadline: "995" }), now, grace), { kind: "pending", label: "Pending" });
+  // past the deadline but inside grace: can still be checked
+  assert.deepEqual(statusPill(o({ pay_deadline: "995" }), now, grace), { kind: "pending", label: "Check due" });
+});
+
+test("bond window mirrors the contract's due_at (verdicts.rs)", () => {
+  const params = { t_retry_ns: "180", t_outage_max_ns: "360" };
+  assert.equal(bondPaysAt({ first_failure_at: null, first_lp_fault_at: null }, params), null);
+  // outage only: first failure + t_outage_max
+  assert.equal(bondPaysAt({ first_failure_at: "1000", first_lp_fault_at: null }, params), 1360n);
+  // a seller fault starts the shorter t_retry clock; the earlier of the two wins
+  assert.equal(bondPaysAt({ first_failure_at: "1000", first_lp_fault_at: "1100" }, params), 1280n);
+  assert.equal(bondPaysAt({ first_failure_at: "1000", first_lp_fault_at: "1300" }, params), 1360n);
+});
+
+test("NEAR amounts from yocto, trimmed", () => {
+  assert.equal(fmtNear("100000000000000000000000"), "0.1");
+  assert.equal(fmtNear("10000000000000000000000"), "0.01");
+  assert.equal(fmtNear("1000000000000000000000000"), "1");
+  assert.equal(fmtNear("1250000000000000000000"), "0.00125");
 });
 
 test("time ago and short account", () => {

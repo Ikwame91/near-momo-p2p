@@ -89,6 +89,16 @@ body {
   overflow-x: clip;
 }
 button, input, a { font: inherit; color: inherit; }
+/* Web Interface Guidelines: no double-tap zoom delay, no grey tap flash, visible hover states. */
+button, a, input { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.skip { position: absolute; left: 12px; top: -60px; z-index: 30; background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 999px; font-weight: 700; }
+.skip:focus { top: 12px; }
+@media (hover: hover) {
+  button.primary:hover:not(:disabled), a.primary:hover { filter: brightness(1.08); }
+  button.secondary:hover:not(:disabled), a.secondary:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); border-color: var(--ink-2); }
+  .chips button:hover:not(:disabled):not(.on), .icon-btn:hover, .wallet:hover, .copy:hover { background: color-mix(in srgb, var(--card) 70%, var(--ink) 12%); }
+  .order-row > button:hover .num, .see-all:hover, .foot a:hover { color: var(--ink-2); }
+}
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .num { font-variant-numeric: tabular-nums; }
 
@@ -179,6 +189,13 @@ h2 { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 
 .payline { margin: var(--s3) 0 0; font-size: 1.2rem; line-height: 1.35; font-weight: 500; }
 .payline b { font-weight: 800; white-space: nowrap; }
 .bond { margin: 10px 0 0; color: var(--ink-2); font-size: 0.95rem; line-height: 1.45; }
+.fees { text-align: center; margin: 6px 0 0; color: var(--ink-2); font-size: 0.85rem; line-height: 1.45; }
+.copyrows { margin: 0 0 var(--s2); display: grid; gap: 2px; text-align: left; }
+.copyrows > div { display: flex; align-items: center; gap: var(--s1); min-height: 44px; border-bottom: 1px solid var(--line); }
+.copyrows dt { color: var(--ink-2); font-size: 0.95rem; }
+.copyrows dd { margin: 0 0 0 auto; display: flex; align-items: center; gap: var(--s1); font-weight: 700; min-width: 0; }
+.copyrows dd > span { overflow-wrap: anywhere; }
+.copy { min-height: 36px; min-width: 44px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--card); font-size: 0.85rem; font-weight: 700; cursor: pointer; }
 .chips { display: flex; gap: var(--s1); margin: var(--s2) 0; }
 .chips button {
   flex: 1; min-width: 0; min-height: 48px; border-radius: 999px; border: 0; background: var(--card);
