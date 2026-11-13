@@ -13,10 +13,10 @@ import { initTheme, currentTheme, toggleTheme } from "./theme.js";
 import { toast } from "./toast.js";
 import { countTo, confetti } from "./motion.js";
 import { loadSeller, sellerScreen } from "./seller.js";
+import { band } from "./band.js";
 
 const escrow = calls(ESCROW_ID);
 const ORDERS_SHOWN = 20;
-const STEPS = ["Choose amount", "Pay with mobile money", "Verify payment", "Receive USDC"];
 const EXPLORER_ACCOUNT = `https://testnet.nearblocks.io/address/${ESCROW_ID}`;
 const RING = 2 * Math.PI * 15.5;
 
@@ -47,6 +47,7 @@ const state = {
   focusId: null,
   compose: false,
   menu: false,
+  allOrders: false, // the order list shows the newest 3 until "See all"
   celebrated: new Set(),
 };
 let amountText = "2";
@@ -222,18 +223,8 @@ function actionButton(label, text, onclick, cls = "primary") {
   return h("button", { class: cls, disabled: state.busy || !state.account, onclick }, text);
 }
 
-/** `ended`: the order stopped at `step` (e.g. expired), so steps before it are done and none is current. */
-function stepper(step, ended = false) {
-  return h("ol", { class: `steps${ended ? " ended" : ""}`, "aria-label": "Buy progress" }, STEPS.map((label, i) => {
-    const n = i + 1;
-    const current = n === step && !ended;
-    const cls = n < step ? "done" : current ? "on" : "";
-    return h("li", { class: cls, "aria-current": current ? "step" : false, "aria-label": label },
-      h("span", { class: "dot" }, n < step ? icon("check") : String(n)),
-      h("span", { class: "lbl" }, label),
-    );
-  }));
-}
+/** Progress as the stamped adinkra band (band.js). `ended`: the order stopped at `step`. */
+const stepper = (step, ended = false) => band(step, ended);
 
 function claimableBar() {
   if (!who() || state.claimable === 0n) return null;
@@ -244,6 +235,14 @@ function claimableBar() {
       ? h("button", { class: "primary", style: "width:auto;min-height:44px;margin-left:auto", disabled: state.busy, onclick: withdraw }, "Withdraw")
       : null,
   );
+}
+
+/** The released amount, counting up from 0 when the card appears (motion.js; instant with reduced motion). */
+function countUp(units) {
+  const el = h("p", { class: "big num" });
+  const target = BigInt(units);
+  countTo(el, 0n, target, (n) => `${n === target ? fmtUsdc(n) : (Number(n) / 1e6).toFixed(2)} USDC`);
+  return el;
 }
 
 function ring(order) {
@@ -265,7 +264,7 @@ function renderAmount() {
   const max = maxBuyable();
   const self = state.account === DEFAULT_LP;
   const limits = { min, max, paused: lp.paused, ready: !!lp.key_fp, self };
-  const payLine = h("div", { class: "big num" });
+  const payLine = h("b", { class: "num" });
   const issue = h("div", { class: "issue", id: "amount-error", role: "alert" });
   const button = state.busy ? spinnerButton(busyLabel()) : h("button", { class: "primary" });
   let paintChips = () => {};
@@ -275,7 +274,8 @@ function renderAmount() {
     const problem = amountIssue(amountText, limits);
     const units = parseUsdc(amountText);
     const ghs = units != null && units > 0n ? ghsPesewasFor(units, rate) : 0n;
-    countTo(payLine, payLine._n ?? 0n, ghs, (n) => (n > 0n ? `GHS ${fmtGhs(n)}` : "GHS –"));
+    countTo(payLine, payLine._n ?? 0n, ghs, (n) => (n > 0n ? `GH₵ ${fmtGhs(n)}` : "GH₵ –"));
+    input.style.width = `${Math.max(1, amountText.length) + 0.15}ch`;
     issue.textContent = problem || "";
     if (state.busy) return;
     if (self) {
@@ -289,7 +289,7 @@ function renderAmount() {
       button.disabled = !!problem;
       button.onclick = () => { if (!amountIssue(amountText, limits)) showWalletModal(); };
     } else {
-      button.textContent = "Continue";
+      button.textContent = "Open order";
       button.disabled = !!problem;
       button.onclick = () => {
         const unitsNow = parseUsdc(amountText);
@@ -320,21 +320,15 @@ function renderAmount() {
   return h("div", { class: "card rise" },
     stepper(1),
     claimableBar(),
-    h("h1", {}, "Buy USDC"),
-    h("div", { class: "seller" },
-      h("div", { class: "row" },
-        h("span", { class: "name" }, DEFAULT_LP),
-        h("span", { class: "num muted" }, `1 USDC = GHS ${fmtGhs(rate)}`),
-      ),
-      h("div", { class: "badge" }, icon("shield"), `Seller has ${fmtUsdc(lp.bond)} USDC staked as guarantee`),
-    ),
-    h("label", { class: "field-label", for: "amount" }, "You receive"),
+    h("h1", { class: "lede" }, "Buy USDC. It stays ", h("strong", {}, "sealed"), " until Paystack sees your MoMo."),
+    h("label", { class: "field-label", for: "amount" }, "You get"),
     h("div", { class: "amount" }, input, h("span", { class: "unit" }, "USDC")),
     h("div", { class: "chips", role: "group", "aria-label": "Quick amounts" }, chips),
-    h("div", { class: "payline" }, h("div", { class: "muted" }, "You pay by mobile money"), payLine),
+    h("p", { class: "payline" }, "You pay ", payLine, " by MoMo to the seller (", DEFAULT_LP, "), at GH₵ ", h("span", { class: "num" }, fmtGhs(rate)), " per USDC."),
+    h("p", { class: "bond" }, `If the payment can't be checked, the seller's ${fmtUsdc(lp.bond)} USDC bond pays you.`),
     issue,
     button,
-    h("p", { class: "muted", style: "margin:12px 0 0" }, `You have ${payMinutes(state.config.params.t_pay_ns)} minutes to pay after opening the order.`),
+    h("p", { class: "note muted" }, `You'll have ${payMinutes(state.config.params.t_pay_ns)} minutes to pay.`),
   );
 }
 
@@ -349,7 +343,7 @@ function renderPay(order) {
     stepper(2),
     h("h1", {}, "Pay with mobile money"),
     ring(order),
-    h("p", { class: "note" }, `Pay GHS ${fmtGhs(order.ghs_amount_pesewas)} for ${fmtUsdc(order.usdc_amount)} USDC.`),
+    h("p", { class: "note" }, `Pay GH₵ ${fmtGhs(order.ghs_amount_pesewas)} for ${fmtUsdc(order.usdc_amount)} USDC.`),
     h("p", { class: "note muted" }, `Pay with MTN MoMo / Telecel Cash on Paystack's page, then come back. You have ${minutes} minutes from when the order opened.`),
     primary,
     actionButton("Check payment", "I've paid, check payment",
@@ -400,8 +394,8 @@ function outcome(order, kind) {
   const amount = `${fmtUsdc(order.usdc_amount)} USDC`;
   const tx = orderTx(order);
   const explorer = tx
-    ? h("a", { href: EXPLORER_TX + tx, target: "_blank", rel: "noopener" }, "View the transaction")
-    : h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, "View the contract on the explorer");
+    ? h("a", { class: "secondary", href: EXPLORER_TX + tx, target: "_blank", rel: "noopener" }, "View transaction")
+    : h("a", { class: "secondary", href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, "View on the explorer");
   let title, body, extra = null;
   if (kind === "success") {
     title = "USDC received";
@@ -415,10 +409,9 @@ function outcome(order, kind) {
       ? "No payment was confirmed in time. You weren't charged, and the seller's USDC has been unlocked."
       : "No payment was confirmed in time. You aren't charged. Closing the order unlocks the seller's USDC.";
     if (nextStep(order, nowNs(), BigInt(state.config.params.t_grace_ns)) === "expire") {
-      extra = h("button", {
-        class: "secondary", disabled: state.busy || !state.account,
-        onclick: () => act("Close order", [escrow.expireOrder(order.id)], { orderId: order.id }),
-      }, "Close order");
+      extra = state.account
+        ? actionButton("Close order", "Close order", () => act("Close order", [escrow.expireOrder(order.id)], { orderId: order.id }), "secondary")
+        : h("p", { class: "muted" }, `Connect ${order.buyer} to close it.`);
     }
   } else {
     title = "This order didn't complete";
@@ -430,7 +423,7 @@ function outcome(order, kind) {
     finished ? null : h("div", { class: "end-icon", "aria-hidden": "true" }, icon("clock")),
     kind === "success" || kind === "slashed" ? h("div", { class: "tick", "aria-hidden": "true" }, icon("check")) : null,
     h("h1", {}, title),
-    h("p", { class: "big num" }, kind === "success" || kind === "slashed" ? amount : ""),
+    finished ? countUp(order.usdc_amount) : null,
     h("p", {}, body),
     kind === "success" && state.claimable > 0n
       ? actionButton("Withdraw", "Withdraw to my wallet", withdraw)
@@ -439,7 +432,7 @@ function outcome(order, kind) {
       ? actionButton("Withdraw", "Withdraw to my wallet", withdraw)
       : null,
     extra,
-    h("p", {}, explorer),
+    explorer,
     h("button", { class: "secondary", onclick: () => { state.compose = true; state.focusId = null; flowKey = null; render(); } }, "Buy more"),
   );
   return card;
@@ -466,7 +459,7 @@ function renderFlow() {
   if (screen.screen === "amount" && key === flowKey) return;
   flowKey = key;
   const readOnly = VIEW_AS && !state.account
-    ? h("p", { class: "muted" }, `Read-only view of ${VIEW_AS}. Connect that wallet to act.`)
+    ? h("p", { class: "viewing" }, h("span", { class: "pill neutral" }, `Viewing ${VIEW_AS} · read-only`))
     : null;
   let body;
   if (!order || screen.screen === "amount") body = renderAmount();
@@ -485,11 +478,12 @@ function renderOrders() {
   const pills = new Map(state.orders.map((o) => [o.id, statusPill(o, now, grace)]));
   // The key holds what is shown, including "time ago" and the pill, so the 1 s timer below
   // rebuilds the list only when one of those has actually changed.
-  const key = JSON.stringify([who(), state.orders.map((o) => [o.id, o.state, o.usdc_amount, pills.get(o.id).label, timeAgo(o.opened_at, now), orderTx(o)])]);
+  const key = JSON.stringify([who(), state.allOrders, state.orders.map((o) => [o.id, o.state, o.usdc_amount, pills.get(o.id).label, timeAgo(o.opened_at, now), orderTx(o)])]);
   if (key === ordersKey) return;
   ordersKey = key;
+  const shown = state.allOrders ? state.orders : state.orders.slice(0, 3);
   const rows = state.orders.length
-    ? state.orders.map((o) => {
+    ? shown.map((o) => {
         const pill = pills.get(o.id);
         return h("div", { class: "order-row" },
           h("button", {
@@ -510,21 +504,26 @@ function renderOrders() {
   root.replaceChildren(
     h("h2", { id: "orders-h" }, state.account ? "My orders" : `Orders of ${VIEW_AS}`),
     h("div", { class: "orders" }, rows),
+    state.orders.length > 3
+      ? h("button", { class: "see-all", "aria-expanded": state.allOrders ? "true" : "false", onclick: () => { state.allOrders = !state.allOrders; renderOrders(); } },
+          state.allOrders ? "Show fewer" : `See all ${state.orders.length}`)
+      : null,
   );
 }
 
 function renderHow() {
   const root = $("how");
   if (root.childElementCount) return;
-  const item = (name, title, text) => h("article", {}, icon(name), h("strong", {}, title), h("p", {}, text));
+  const item = (title, text) => h("li", {}, h("strong", {}, title), h("p", {}, text));
   root.replaceChildren(
     h("h2", { id: "how-h" }, "How it works"),
-    h("div", { class: "how-grid" },
-      item("lock", "USDC is locked", "The seller's USDC sits in a contract nobody can change."),
-      item("phone", "You pay MoMo", "Cedis go to the seller on Paystack. Your number stays on their page."),
-      item("shield", "Checked in a secure enclave", "Paystack is asked directly. The seller's key never leaves the enclave."),
-      item("check", "USDC is released", "A match releases the USDC. If the seller can't be checked, their bond pays you."),
+    h("ol", { class: "how-list" },
+      item("USDC is locked", "The seller's USDC sits in the escrow contract. Only a Paystack check for your order releases it."),
+      item("You pay MoMo", "Cedis go to the seller on Paystack. Your number stays on their page."),
+      item("Checked in a secure enclave", "Paystack is asked directly. The seller's key never leaves the enclave."),
+      item("USDC is released", "A match releases the USDC. If the seller can't be checked, their bond pays you."),
     ),
+    h("p", { class: "foot" }, "The band at the top is stamped like adinkra cloth, one symbol per step: Dwennimmen, the ram's horns, for strength with humility, and Nkyinkyim, the twisting path."),
     h("p", { class: "foot" }, "Each step is a transaction you confirm in your wallet. Keep about 1 testnet NEAR in it for fees; most of it comes back. ",
       h("a", { href: EXPLORER_ACCOUNT, target: "_blank", rel: "noopener" }, ESCROW_ID),
       SELLER_ID ? null : [" · ", h("a", { href: SELLER_HREF }, "Seller view")]),

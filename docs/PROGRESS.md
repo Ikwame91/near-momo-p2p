@@ -9,6 +9,17 @@ Next:
 Gotchas:
 ```
 
+## 2026-11-13 20:00 UTC — Web page redesign ("wax print", D-027)
+Done: three directions rendered (rate board, wax print, sealed envelope); Kwame picked wax print
+with the sealed headline. Built in `web/`: new tokens and type in `style.css`, `band.js` (stamped
+adinkra progress band replacing the step tracker), amount screen copy ("per USDC", "the seller
+(ikwame.testnet)", GH₵), numbered "How it works". Earlier today: OutLayer down ~07:00–16:34 UTC;
+order 7 closed (NOT_PAID); order 8 bought live (RELEASED); PR #18 (spinners, one toast, OG tags).
+Verified: `npm test` 12 pass, `npm run build` OK, no console errors, screenshots at 402x874 and
+375x667 in light and dark (docs/DESIGN.md).
+Failed / blocked: nothing. The theme flip after withdraw is still not reproduced.
+Next: Kwame reviews the screenshots → merge → Vercel; video, X post, submission.
+
 ## 2026-11-12 — Merged to main (PR #16) and hosted on Vercel (M4.5)
 Done:
 - PR #16 (web page, judge README, M1.9 tests, CI) merged into main as `e5c9098`; CI green on main

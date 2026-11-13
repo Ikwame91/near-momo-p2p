@@ -22,9 +22,6 @@ const STATUS = {
   "no-key": ["pending", "Key not verified yet"],
 };
 
-const stat = (label, value, hint) =>
-  h("div", { class: "stat" }, h("div", { class: "stat-label" }, label), h("div", { class: "stat-value num" }, value), hint ? h("div", { class: "stat-hint" }, hint) : null);
-
 /** The seller page body. `data` from loadSeller; `nowNs` and `graceNs` are BigInt nanoseconds. */
 export function sellerScreen({ data, lpId, escrowId, explorerAccount, nowNs, graceNs, buyHref }) {
   const back = h("a", { class: "back-link", href: buyHref }, "← Back to buying USDC");
@@ -46,15 +43,14 @@ export function sellerScreen({ data, lpId, escrowId, explorerAccount, nowNs, gra
         h("h1", { title: lpId }, shortAccount(lpId)),
         h("div", { class: "muted small" }, `Seller on ${lp.provider === "paystack" ? "Paystack (mobile money)" : lp.provider} · read-only`)),
       h("span", { class: `pill ${tone}` }, label)),
-    h("div", { class: "badge" }, icon("shield"), `${usdc(lp.bond)} staked as guarantee for buyers`),
-    h("div", { class: "stats" },
-      stat("Bond", usdc(lp.bond), "Slashed to a buyer if this seller can't be verified"),
-      stat("Liquidity", usdc(lp.liquidity), "USDC waiting for new buyers"),
-      stat("Locked in orders", usdc(lp.locked), `${lp.open_orders} open ${lp.open_orders === 1 ? "order" : "orders"}`),
-      stat("Can sell right now", usdc(s.canServe), "Liquidity, capped so locked never exceeds the bond"),
+    h("div", { class: "trust" },
+      h("div", {}, h("div", { class: "trust-value num" }, usdc(lp.bond)), h("div", { class: "trust-label" }, "Guarantee. Paid to a buyer if this seller can't be verified.")),
+      h("div", {}, h("div", { class: "trust-value num" }, usdc(s.canServe)), h("div", { class: "trust-label" }, "Available to buy right now.")),
     ),
     h("div", { class: "facts" },
-      h("div", {}, h("span", { class: "muted" }, "Price"), h("span", { class: "num" }, `1 USDC = GHS ${fmtGhs(lp.quote.rate_pesewas_per_usdc)}`)),
+      h("div", {}, h("span", { class: "muted" }, "Liquidity"), h("span", { class: "num" }, usdc(lp.liquidity))),
+      h("div", {}, h("span", { class: "muted" }, "Locked in orders"), h("span", { class: "num" }, `${usdc(lp.locked)} · ${lp.open_orders} open`)),
+      h("div", {}, h("span", { class: "muted" }, "Price"), h("span", { class: "num" }, `GH₵ ${fmtGhs(lp.quote.rate_pesewas_per_usdc)} per USDC`)),
       h("div", {}, h("span", { class: "muted" }, "Order size"), h("span", { class: "num" }, `${fmtUsdc(lp.quote.min_usdc)} – ${fmtUsdc(lp.quote.max_usdc)} USDC`)),
       h("div", {}, h("span", { class: "muted" }, "New-buyer exposure"), h("span", { class: "num" }, `${fmtUsdc(lp.new_buyer_open)} of ${fmtUsdc(lp.quote.new_buyer_exposure_max)} USDC`)),
       h("div", {}, h("span", { class: "muted" }, "Paystack key"),

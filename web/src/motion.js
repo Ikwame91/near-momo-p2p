@@ -28,7 +28,7 @@ export function confetti(host) {
   const box = document.createElement("div");
   box.className = "confetti";
   box.setAttribute("aria-hidden", "true");
-  const colours = ["var(--brand)", "var(--pending)", "var(--brand-ink)", "var(--focus)"];
+  const colours = ["var(--brand)", "var(--ink)", "var(--ink-2)"];
   for (let i = 0; i < 18; i++) {
     const piece = document.createElement("i");
     piece.style.background = colours[i % colours.length];
