@@ -211,6 +211,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 2px solid color-mix(in srgb, var(--brand-ink) 35%, transparent);
   border-top-color: var(--brand-ink); animation: spin 400ms linear infinite;
 }
+button.secondary .spin { border-color: color-mix(in srgb, var(--ink) 25%, transparent); border-top-color: var(--ink); }
+button[aria-busy="true"]:disabled { opacity: 0.8; cursor: progress; }
 
 .ring-wrap { position: relative; width: 112px; height: 112px; margin: 0 auto var(--s2); }
 .ring-wrap svg { width: 112px; height: 112px; transform: rotate(-90deg); }

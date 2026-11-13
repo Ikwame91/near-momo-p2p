@@ -24,8 +24,8 @@ export function toast(kind, message, link) {
     el.classList.add("leaving");
     setTimeout(() => el.remove(), 150);
   };
-  host.append(el);
-  while (host.children.length > 3) host.firstChild.remove();
+  // One message at a time: the newest replaces whatever is showing, so toasts never stack over the page.
+  host.replaceChildren(el);
   if (kind !== "pending") setTimeout(dismiss, kind === "error" ? 9000 : 6000);
   return dismiss;
 }

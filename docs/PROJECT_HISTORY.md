@@ -343,7 +343,14 @@ with their PR.
 - **2026-11-12, `4be7942`:** PLAN / PROGRESS / PROJECT_HISTORY / README record it.
 - **2026-11-12, `e5c9098`:** PR #16 merged: web page, judge README, M1.9 tests and CI are on `main`.
 - **2026-11-12, Vercel (no commit):** Kwame deployed `web/` from `main`: https://near-momo-p2p.vercel.app.
-- **2026-11-12, this commit:** README, PLAN (M4.5), DEPLOY_WEB, PROGRESS link the live site.
+- **2026-11-12, `fd2800c` (merged as `cfa2aee`):** README, PLAN (M4.5), DEPLOY_WEB, PROGRESS link the live site.
+- **2026-11-13, OutLayer outage (no commit):** OutLayer testnet failed every probe from about 07:00 to 16:04 UTC, then
+  answered at 16:34. d2 order 7 was then closed with one claim (NOT_PAID, `not_found`, so EXPIRED; bond untouched).
+  Kwame bought 2 USDC live through the page as d2 order 8 (RELEASED).
+- **2026-11-13, this commit:** demo polish from the video review. Only the pressed button shows the spinner
+  (`actionButton` in `web/src/main.js`), one toast at a time (`web/src/toast.js`), the wallet modal follows the
+  page's dark theme (`web/src/near.js`), description and Open Graph tags (`web/index.html`), and the README
+  opening no longer says "no owner, no admin" while escrow-d2 keeps its full-access key.
 
 ---
 
@@ -431,6 +438,11 @@ Short form. Full context in `docs/DECISIONS.md`.
 - **`deploy-testnet.sh` and `buy.sh buyer` read the public key from `outlayer whoami`**, so they
   only work where the outlayer CLI is logged in as the parent account.
 
+**Web page**
+- A theme flip to light after withdraw was seen in the demo video but not reproduced: the page kept its
+  theme through refreshes in dark, saved-dark and saved-light setups. Likely the wallet's own light approval
+  window. A light page on a dark OS still gets a dark wallet modal (the library has no light override).
+
 **Docs out of date**
 - DECISIONS D-022 still says "Kwame to confirm"; PLAN v0.2 records that it stays.
 - D-019 says the AGENTS.md merge rule should be updated; it hasn't been.
@@ -449,5 +461,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-12. Covers all commits up to and including `e5c9098` (`main`), plus the commit that adds
-the live link.
+2026-11-13. Covers all commits up to and including `cfa2aee` (`main`), plus the demo polish commit on
+`claude/practical-dijkstra-gt0v80`.

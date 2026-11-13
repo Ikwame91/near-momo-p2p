@@ -5,8 +5,9 @@
 **Buy USDC with mobile money, without trusting the seller.** A NEAR escrow contract holds the
 seller's USDC and releases it only when a program running in a secure enclave (an OutLayer TEE)
 has asked the payment provider directly: "did this buyer pay this order?" If the seller's side
-can't be verified, the seller's staked bond pays the buyer. There is no owner, no admin and no
-dispute desk: the rules are in the contract.
+can't be verified, the seller's staked bond pays the buyer. The release decision comes only from
+the enclave's Paystack check; there is no dispute desk and no admin function in the contract. On
+this testnet deploy the escrow account still has its upgrade key; see [Upgrade keys](#upgrade-keys).
 
 **Try it live: https://near-momo-p2p.vercel.app** (NEAR testnet; seller view: [`?seller`](https://near-momo-p2p.vercel.app/?seller)).
 
