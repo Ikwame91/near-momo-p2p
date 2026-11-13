@@ -8,6 +8,7 @@ import { setupIntearWallet } from "@near-wallet-selector/intear-wallet";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
 import { toTransaction } from "./calls.js";
 import { ESCROW_ID, RPC_URL } from "./config.js";
+import { currentTheme } from "./theme.js";
 
 /** Call a view method; returns the decoded JSON result. Throws on any RPC or contract error. */
 export async function view(contractId, method, args = {}) {
@@ -36,6 +37,7 @@ export async function view(contractId, method, args = {}) {
 
 let selector;
 let modal;
+let modalOptions; // the modal keeps this object by reference and reads `theme` on every render
 
 /** Set up the wallet selector; `onChange(accountId | null)` fires now and on every sign in/out. */
 export async function initWallet(onChange) {
@@ -45,13 +47,16 @@ export async function initWallet(onChange) {
     modules: [setupMeteorWallet(), setupIntearWallet()],
   });
   // No function-call access key is requested: every step attaches NEAR, so the wallet confirms each one.
-  modal = setupModal(selector, { contractId: ESCROW_ID, description: "Testnet only. Pick the wallet that holds your NEAR testnet account." });
+  modalOptions = { contractId: ESCROW_ID, description: "Testnet only. Pick the wallet that holds your NEAR testnet account." };
+  modal = setupModal(selector, modalOptions);
   const active = (state) => state.accounts.find((a) => a.active)?.accountId || null;
   selector.store.observable.subscribe((state) => onChange(active(state)));
   onChange(active(selector.store.getState()));
 }
 
 export function showWalletModal() {
+  // Match the page: without this the modal follows the OS setting, so a dark page could open a light modal.
+  modalOptions.theme = currentTheme() === "dark" ? "dark" : undefined;
   modal.show();
 }
 

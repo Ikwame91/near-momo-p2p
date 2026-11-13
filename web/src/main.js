@@ -41,6 +41,7 @@ const state = {
   orders: [],
   claimable: 0n,
   busy: false,
+  busyAction: null, // label of the action in flight, so its own button shows the spinner
   busyEnclave: false, // the running action waits on OutLayer (checkout link or payment check)
   loadError: null,
   focusId: null,
@@ -150,6 +151,7 @@ async function act(label, txs, meta = {}) {
   if (state.busy || !state.account) return;
   state.busy = true;
   state.busyEnclave = !!meta.enclave;
+  state.busyAction = label;
   const before = meta.orderId != null ? state.orders.find((o) => o.id === meta.orderId) : null;
   let sentHash = null;
   let ok = false;
@@ -176,6 +178,7 @@ async function act(label, txs, meta = {}) {
   } finally {
     state.busy = false;
     state.busyEnclave = false;
+    state.busyAction = null;
     await load();
     if (ok && meta.enclave && before) {
       const after = state.orders.find((o) => o.id === meta.orderId);
@@ -209,8 +212,14 @@ async function withdraw() {
   await act("Withdraw", txs);
 }
 
-function spinnerButton(label) {
-  return h("button", { class: "primary", disabled: true }, h("span", { class: "spin", "aria-hidden": "true" }), label);
+function spinnerButton(label, cls = "primary") {
+  return h("button", { class: cls, disabled: true, "aria-busy": "true" }, h("span", { class: "spin", "aria-hidden": "true" }), label);
+}
+
+/** While `label` is the action in flight, its button becomes a disabled spinner; other buttons just disable. */
+function actionButton(label, text, onclick, cls = "primary") {
+  if (state.busy && state.busyAction === label) return spinnerButton(busyLabel(), cls);
+  return h("button", { class: cls, disabled: state.busy || !state.account, onclick }, text);
 }
 
 /** `ended`: the order stopped at `step` (e.g. expired), so steps before it are done and none is current. */
@@ -332,15 +341,10 @@ function renderAmount() {
 function renderPay(order) {
   const url = safeCheckout(order.checkout_url);
   const minutes = payMinutes(state.config.params.t_pay_ns);
-  const primary = state.busy
-    ? spinnerButton(busyLabel())
-    : url
-      ? h("a", { class: "primary", href: url, target: "_blank", rel: "noopener" }, "Open Paystack checkout")
-      : h("button", {
-          class: "primary",
-          disabled: !state.account,
-          onclick: () => act("Open Paystack checkout", [escrow.requestCheckout(order.id, fee())], { orderId: order.id, enclave: "checkout" }),
-        }, "Open Paystack checkout");
+  const primary = url && !state.busy
+    ? h("a", { class: "primary", href: url, target: "_blank", rel: "noopener" }, "Open Paystack checkout")
+    : actionButton("Open Paystack checkout", "Open Paystack checkout",
+        () => act("Open Paystack checkout", [escrow.requestCheckout(order.id, fee())], { orderId: order.id, enclave: "checkout" }));
   return h("div", { class: "card rise" },
     stepper(2),
     h("h1", {}, "Pay with mobile money"),
@@ -348,11 +352,8 @@ function renderPay(order) {
     h("p", { class: "note" }, `Pay GHS ${fmtGhs(order.ghs_amount_pesewas)} for ${fmtUsdc(order.usdc_amount)} USDC.`),
     h("p", { class: "note muted" }, `Pay with MTN MoMo / Telecel Cash on Paystack's page, then come back. You have ${minutes} minutes from when the order opened.`),
     primary,
-    h("button", {
-      class: "secondary",
-      disabled: state.busy || !state.account,
-      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }),
-    }, "I've paid, check payment"),
+    actionButton("Check payment", "I've paid, check payment",
+      () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }), "secondary"),
   );
 }
 
@@ -364,24 +365,18 @@ function renderVerify(order) {
   if (step === "recheck") {
     title = "Not confirmed yet";
     body = `The payment couldn't be checked (${order.failures} ${order.failures === 1 ? "try" : "tries"}). Check again in a few minutes. If it can never be checked, the seller's bond pays you.`;
-    action = h("button", {
-      class: "primary", disabled: state.busy || !state.account,
-      onclick: () => act("Check again", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }),
-    }, state.busy ? busyLabel() : "Check again");
+    action = actionButton("Check again", "Check again",
+      () => act("Check again", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }));
   } else if (step === "check") {
     title = "The pay window has ended";
     body = "If you paid in time, we can still check. If not, you can close the order. You are not charged.";
-    action = h("button", {
-      class: "primary", disabled: state.busy || !state.account,
-      onclick: () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }),
-    }, state.busy ? busyLabel() : "Check payment");
+    action = actionButton("Check payment", "Check payment",
+      () => act("Check payment", [escrow.claim(order.id, fee())], { orderId: order.id, enclave: "claim" }));
   } else if (step === "finalize") {
     title = "Payment confirmed";
     body = "The USDC unlocks after a short safety delay, then you can take it to your wallet.";
-    action = h("button", {
-      class: "primary", disabled: state.busy || !state.account,
-      onclick: () => act("Finish release", [escrow.finalizeRelease(order.id)], { orderId: order.id }),
-    }, state.busy ? busyLabel() : "Finish release");
+    action = actionButton("Finish release", "Finish release",
+      () => act("Finish release", [escrow.finalizeRelease(order.id)], { orderId: order.id }));
   }
   const tipId = `tip-${order.id}`;
   return h("div", { class: "card rise enclave" },
@@ -438,10 +433,10 @@ function outcome(order, kind) {
     h("p", { class: "big num" }, kind === "success" || kind === "slashed" ? amount : ""),
     h("p", {}, body),
     kind === "success" && state.claimable > 0n
-      ? h("button", { class: "primary", disabled: state.busy || !state.account, onclick: withdraw }, "Withdraw to my wallet")
+      ? actionButton("Withdraw", "Withdraw to my wallet", withdraw)
       : null,
     kind === "slashed" && state.claimable > 0n
-      ? h("button", { class: "primary", disabled: state.busy || !state.account, onclick: withdraw }, "Withdraw to my wallet")
+      ? actionButton("Withdraw", "Withdraw to my wallet", withdraw)
       : null,
     extra,
     h("p", {}, explorer),
