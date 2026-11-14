@@ -14,7 +14,44 @@ this testnet deploy the escrow account still has its upgrade key; see [Upgrade k
 First market: Ghana (MTN MoMo, Telecel Cash). Built for the NEAR Hackathon 2026, track
 Real-World Money. **Testnet and Paystack test mode only: no real money moves.**
 
-![Buyer page](docs/screenshots/buyer-redesign/after-mobile-light.png)
+<p>
+  <img src="docs/screenshots/wax-print/buy.png" width="250" alt="Buy screen: choose 2 USDC, pay GH₵ 30.00 by MoMo">
+  <img src="docs/screenshots/wax-print/pay.png" width="250" alt="Pay screen: countdown, amount and order reference with copy buttons">
+  <img src="docs/screenshots/wax-print/received.png" width="250" alt="USDC received: 2 USDC released">
+</p>
+<sub>The live page on Nov 13. The pay screen shows a sample order on a local preview; the other two are real.</sub>
+
+## Who is this for
+
+**Ama** is a nurse in Kumasi with cedis on MTN MoMo. She wants dollars: to save in something that
+doesn't lose value like the cedi, or to pay for something priced in dollars. **Kwesi** is a
+freelance designer whose US client pays him in USDC (a digital dollar). His rent is in cedis.
+
+They need each other, and today they meet in a WhatsApp or Telegram trading group. Someone has to
+go first. If Ama sends GH₵ 300 by MoMo first, Kwesi can keep it and never send the USDC. If Kwesi
+sends the USDC first, Ama can show a fake "payment received" SMS or reverse the payment. Exchange
+P2P desks fix this by holding the crypto themselves and settling disputes with staff, so you trust
+the company instead.
+
+With OpenRamp nobody has to trust anybody:
+
+1. Kwesi locks his USDC in a NEAR contract, plus a **bond** he loses if he cheats.
+2. Ama picks 20 USDC and sees "You pay GH₵ 300". She pays by MoMo on Paystack's normal checkout
+   page; the cedis go to Kwesi's Paystack account.
+3. She presses "I've paid". A sealed program (a secure enclave) asks Paystack directly whether
+   *this* order was paid. Nobody can fake that answer, not Ama and not Kwesi.
+4. Paystack says yes, so the contract releases the 20 USDC to Ama. No person approves it.
+5. If Kwesi blocks the check (for example by cancelling his Paystack key), it can't be verified,
+   and after a short window his bond pays Ama.
+
+| Real life | In this demo |
+|---|---|
+| Kwesi, the seller with USDC who wants cedis | `ikwame.testnet`, with a 50 USDC bond |
+| Ama, the buyer with cedis who wants USDC | `firmstreet.testnet` (any testnet wallet) |
+| Her MoMo payment | Paystack test mode, test number 0551234987: no real money |
+
+This build is the **buy side** (cedis to USDC), the half where an ordinary person is most at risk.
+In real life sellers would be businesses with a Paystack account; see [Honest limits](#honest-limits).
 
 ## How it works
 
