@@ -107,6 +107,16 @@ deploy and `new` in one transaction [87GcoZAa…](https://testnet.nearblocks.io/
 created, checked the payment, and withdrew. The order now reads `RELEASED` (see it read-only on
 the page with `?view=firmstreet.testnet`, or call `get_order` with `{"order_id": 6}` on the escrow).
 
+**Bought live through the redesigned page (d2, order 13, Nov 14, recorded for the demo video):**
+`firmstreet.testnet` in Meteor, 2 USDC for GH₵ 30.00.
+
+| Step | Transaction |
+|---|---|
+| Opens order 13 (`order_opened`) | [8dhnZPY7…](https://testnet.nearblocks.io/txns/8dhnZPY7XNreK8hy94DeVc9d8wWHevrr6nGqS9wDBoNh) |
+| Enclave creates the Paystack checkout (`order_checkout`) | [DrwGsQPJ…](https://testnet.nearblocks.io/txns/DrwGsQPJuoAUWp9aEdGWMNe2zan9mR1zdtV2nvWgZRTM) |
+| Paid by test MoMo; "I've paid" check → `order_released` | [GUUujBAF…](https://testnet.nearblocks.io/txns/GUUujBAFSQHXnoEHCdji2oqdmYZsL3ZuyV3Tkf3xtyno) |
+| Withdraws 2 USDC to the wallet | [2wDRonCA…](https://testnet.nearblocks.io/txns/2wDRonCATdtqQbnCKqRqTWTHrhzGWUTLb6KzdcL7QwjP) |
+
 **NOT_PAID and slash (earlier deploy d1, Nov 4):**
 
 | Outcome | Transactions |
