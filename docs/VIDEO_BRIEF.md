@@ -66,7 +66,8 @@ Match the app so the illustrations and the screen recordings feel like one film:
 - The checker is an **OutLayer** program in a **TEE** (secure enclave). It calls Paystack with the
   seller's own key; the key never leaves the enclave.
 - Demo numbers: rate **GH₵ 15.00 per USDC**; seller bond **50 USDC**; a real purchase on Nov 13:
-  **2 USDC for GH₵ 30.00** (order 8, released).
+  **2 USDC for GH₵ 30.00** (order 8, released); the live recording on Nov 14 is **order 13**, also
+  2 USDC for GH₵ 30.00, released (its four transactions are in the README proof table).
 - Built: buy side only (cedis to USDC). The page is plain JavaScript on Vercel; the contract is
   Rust on NEAR with 270+ tests.
 - Do **not** say: "no owner", "nobody can change the contract", "fully decentralized", "instant",

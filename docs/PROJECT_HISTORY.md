@@ -367,10 +367,12 @@ with their PR.
   `due_at`), NEAR fees before confirming (`fmtNear`), Copy buttons, hover/tap/skip-link/theme-color fixes.
 - **2026-11-13, on-chain (no commit):** OutLayer up again 20:36, down 21:25–21:54, up 22:09 and at 00:06 Nov 14;
   order 12 closed with `expire_order` (orders 11 and 12 opened during outages, never paid).
-- **2026-11-14, this commit:** README "Who is this for" (Ama the buyer, Kwesi the seller, the trust problem in P2P
+- **2026-11-14, `3a2c607` (merged as `a5300a5`, PR #21):** README "Who is this for" (Ama the buyer, Kwesi the seller, the trust problem in P2P
   groups) and new-design screenshots (`docs/screenshots/wax-print/`); DEMO_SCRIPT rewritten for the new page with a
   20-second story opening; `docs/VIDEO_BRIEF.md`, a brief for an editor or AI video tool (scenes, illustration
   style, facts that must stay right).
+- **2026-11-14, this commit:** README proof table adds order 13, bought live through the redesigned page for the
+  demo video (open, checkout, claim → `order_released`, withdraw; all four verified by RPC `EXPERIMENTAL_tx_status`).
 
 ---
 
@@ -483,5 +485,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-14. Covers all commits up to and including `d3cf074` (`main`), plus the README story and video
-brief commit on `claude/practical-dijkstra-gt0v80`.
+2026-11-14. Covers all commits up to and including `a5300a5` (`main`), plus the order 13 proof commit on
+`claude/practical-dijkstra-gt0v80`.
