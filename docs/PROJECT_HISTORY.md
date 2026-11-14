@@ -362,9 +362,15 @@ with their PR.
   stamped tick and a "View transaction" button, and "How it works" step 1 no longer says "no admin functions".
 - **2026-11-13, on-chain (no commit):** orders 3, 5, 9 and 10 closed with `expire_order`; OutLayer down again from
   about 20:10 UTC (order 11 opened, no checkout).
-- **2026-11-13, this commit:** UI review with Vercel's `web-design-guidelines` skill (D-028, `docs/UI_REVIEW.md`),
+- **2026-11-13, `724550b` (merged as `d3cf074`, PR #20):** UI review with Vercel's `web-design-guidelines` skill (D-028, `docs/UI_REVIEW.md`),
   skill committed under `.claude/skills/`. Specific status labels, a bond-window countdown (`bondPaysAt`, mirrors
   `due_at`), NEAR fees before confirming (`fmtNear`), Copy buttons, hover/tap/skip-link/theme-color fixes.
+- **2026-11-13, on-chain (no commit):** OutLayer up again 20:36, down 21:25–21:54, up 22:09 and at 00:06 Nov 14;
+  order 12 closed with `expire_order` (orders 11 and 12 opened during outages, never paid).
+- **2026-11-14, this commit:** README "Who is this for" (Ama the buyer, Kwesi the seller, the trust problem in P2P
+  groups) and new-design screenshots (`docs/screenshots/wax-print/`); DEMO_SCRIPT rewritten for the new page with a
+  20-second story opening; `docs/VIDEO_BRIEF.md`, a brief for an editor or AI video tool (scenes, illustration
+  style, facts that must stay right).
 
 ---
 
@@ -477,5 +483,5 @@ Short form. Full context in `docs/DECISIONS.md`.
 
 ## 6. Last updated
 
-2026-11-13. Covers all commits up to and including `3fdaac3` (`main`), plus the UI review commit on
-`claude/practical-dijkstra-gt0v80`.
+2026-11-14. Covers all commits up to and including `d3cf074` (`main`), plus the README story and video
+brief commit on `claude/practical-dijkstra-gt0v80`.
